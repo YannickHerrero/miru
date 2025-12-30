@@ -72,15 +72,20 @@ impl TorrentioClient {
             ApiError::Torrentio(format!("Failed to parse response: {}", e))
         })?;
 
-        Ok(data
-            .streams
-            .into_iter()
-            .map(Stream::from)
-            .collect())
+        let mut streams: Vec<Stream> = data.streams.into_iter().map(Stream::from).collect();
+
+        // Sort by quality (descending), then by size (ascending)
+        streams.sort_by(|a, b| {
+            match b.quality_rank().cmp(&a.quality_rank()) {
+                std::cmp::Ordering::Equal => a.size_bytes.cmp(&b.size_bytes),
+                other => other,
+            }
+        });
+
+        Ok(streams)
     }
 
     /// Get streams for a movie
-    #[allow(dead_code)]
     pub async fn get_movie_streams(&self, imdb_id: &str) -> Result<Vec<Stream>, ApiError> {
         let config_str = self.build_config_string();
         let url = format!(
@@ -103,11 +108,17 @@ impl TorrentioClient {
             ApiError::Torrentio(format!("Failed to parse response: {}", e))
         })?;
 
-        Ok(data
-            .streams
-            .into_iter()
-            .map(Stream::from)
-            .collect())
+        let mut streams: Vec<Stream> = data.streams.into_iter().map(Stream::from).collect();
+
+        // Sort by quality (descending), then by size (ascending)
+        streams.sort_by(|a, b| {
+            match b.quality_rank().cmp(&a.quality_rank()) {
+                std::cmp::Ordering::Equal => a.size_bytes.cmp(&b.size_bytes),
+                other => other,
+            }
+        });
+
+        Ok(streams)
     }
 }
 
@@ -147,10 +158,10 @@ pub struct Stream {
     pub quality: Option<String>,
     /// File size as string (e.g., "1.2 GB")
     pub size: Option<String>,
+    /// File size in bytes (for sorting)
+    pub size_bytes: u64,
     /// Number of seeders
     pub seeders: Option<u32>,
-    /// Whether this is cached on Real-Debrid
-    pub is_cached: bool,
     /// Stream URL (direct or magnet)
     pub url: Option<String>,
     /// Info hash for magnet links
@@ -179,14 +190,39 @@ impl Stream {
         parts.join(" ")
     }
 
-    /// Get cache status indicator
-    pub fn cache_indicator(&self) -> &str {
-        if self.is_cached {
-            "🟢"
-        } else {
-            "🟡"
+    /// Get quality rank for sorting (higher is better)
+    pub fn quality_rank(&self) -> u8 {
+        match self.quality.as_deref() {
+            Some("2160p") | Some("4K") => 4,
+            Some("1080p") => 3,
+            Some("720p") => 2,
+            Some("480p") | Some("360p") => 1,
+            _ => 0,
         }
     }
+}
+
+/// Parse size string like "1.2 GB" or "800 MB" into bytes
+fn parse_size_to_bytes(size_str: &str) -> u64 {
+    let parts: Vec<&str> = size_str.split_whitespace().collect();
+    if parts.len() != 2 {
+        return u64::MAX;
+    }
+
+    let value: f64 = match parts[0].parse() {
+        Ok(v) => v,
+        Err(_) => return u64::MAX,
+    };
+
+    let multiplier: u64 = match parts[1].to_uppercase().as_str() {
+        "TB" => 1024 * 1024 * 1024 * 1024,
+        "GB" => 1024 * 1024 * 1024,
+        "MB" => 1024 * 1024,
+        "KB" => 1024,
+        _ => return u64::MAX,
+    };
+
+    (value * multiplier as f64) as u64
 }
 
 impl From<StreamResponse> for Stream {
@@ -200,9 +236,6 @@ impl From<StreamResponse> for Stream {
             .unwrap_or(&resp.name)
             .to_string();
 
-        // Check if cached (name contains "[RD+]" or "[RD download]")
-        let is_cached = resp.name.contains("[RD+]") || resp.name.contains("⚡");
-
         // Parse quality from title
         let quality = QUALITY_RE
             .find(&resp.title)
@@ -212,6 +245,12 @@ impl From<StreamResponse> for Stream {
         let size = SIZE_RE.captures(&resp.title).map(|caps| {
             format!("{} {}", &caps[1], &caps[2])
         });
+
+        // Parse size into bytes for sorting
+        let size_bytes = size
+            .as_ref()
+            .map(|s| parse_size_to_bytes(s))
+            .unwrap_or(u64::MAX);
 
         // Parse seeders from title
         let seeders = SEEDERS_RE
@@ -223,8 +262,8 @@ impl From<StreamResponse> for Stream {
             title: resp.title,
             quality,
             size,
+            size_bytes,
             seeders,
-            is_cached,
             url: resp.url,
             info_hash: resp.info_hash,
         }
@@ -248,16 +287,16 @@ mod tests {
         let stream = Stream::from(resp);
 
         assert_eq!(stream.provider, "nyaasi");
-        assert!(stream.is_cached);
         assert_eq!(stream.quality, Some("1080p".to_string()));
         assert_eq!(stream.size, Some("1.2 GB".to_string()));
         assert_eq!(stream.seeders, Some(150));
+        assert_eq!(stream.quality_rank(), 3); // 1080p = rank 3
     }
 
     #[test]
-    fn test_parse_stream_not_cached() {
+    fn test_parse_stream_720p() {
         let resp = StreamResponse {
-            name: "[RD download] 1337x".to_string(),
+            name: "[RD+] 1337x".to_string(),
             title: "Some Anime 720p\n👤 50 💾 800 MB".to_string(),
             url: None,
             info_hash: Some("abc123".to_string()),
@@ -267,9 +306,38 @@ mod tests {
         let stream = Stream::from(resp);
 
         assert_eq!(stream.provider, "1337x");
-        assert!(!stream.is_cached);
         assert_eq!(stream.quality, Some("720p".to_string()));
         assert_eq!(stream.size, Some("800 MB".to_string()));
         assert_eq!(stream.seeders, Some(50));
+        assert_eq!(stream.quality_rank(), 2); // 720p = rank 2
+    }
+
+    #[test]
+    fn test_parse_size_to_bytes() {
+        assert_eq!(parse_size_to_bytes("1 GB"), 1024 * 1024 * 1024);
+        assert_eq!(parse_size_to_bytes("800 MB"), 800 * 1024 * 1024);
+        assert_eq!(parse_size_to_bytes("1.5 GB"), (1.5 * 1024.0 * 1024.0 * 1024.0) as u64);
+        assert_eq!(parse_size_to_bytes("invalid"), u64::MAX);
+    }
+
+    #[test]
+    fn test_quality_rank() {
+        let make_stream = |quality: Option<&str>| Stream {
+            provider: "test".to_string(),
+            title: "test".to_string(),
+            quality: quality.map(String::from),
+            size: None,
+            size_bytes: 0,
+            seeders: None,
+            url: None,
+            info_hash: None,
+        };
+
+        assert_eq!(make_stream(Some("2160p")).quality_rank(), 4);
+        assert_eq!(make_stream(Some("4K")).quality_rank(), 4);
+        assert_eq!(make_stream(Some("1080p")).quality_rank(), 3);
+        assert_eq!(make_stream(Some("720p")).quality_rank(), 2);
+        assert_eq!(make_stream(Some("480p")).quality_rank(), 1);
+        assert_eq!(make_stream(None).quality_rank(), 0);
     }
 }
