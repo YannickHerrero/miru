@@ -10,6 +10,9 @@ pub enum ApiError {
     #[error("Anilist API error: {0}")]
     Anilist(String),
 
+    #[error("TMDB API error: {0}")]
+    Tmdb(String),
+
     #[error("Real-Debrid API error: {0}")]
     RealDebrid(String),
 
@@ -22,7 +25,7 @@ pub enum ApiError {
     #[error("ID mapping error: {0}")]
     Mapping(String),
 
-    #[error("Could not find IMDB ID for this anime. Try a different title.")]
+    #[error("Could not find IMDB ID for this title. Try a different one.")]
     MappingNotFound,
 
     #[error("Network error: {0}")]

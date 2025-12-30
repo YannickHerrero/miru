@@ -1,6 +1,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
+use crate::api::media::{Episode, Media, MediaSource, MediaType};
 use crate::error::ApiError;
 
 const ANILIST_URL: &str = "https://graphql.anilist.co";
@@ -251,11 +252,13 @@ pub struct Anime {
 
 impl Anime {
     /// Get the best display title
+    #[allow(dead_code)]
     pub fn display_title(&self) -> &str {
         self.title_english.as_deref().unwrap_or(&self.title)
     }
 
     /// Get episode list (either from streaming episodes or generated)
+    #[allow(dead_code)]
     pub fn get_episodes(&self) -> Vec<Episode> {
         let count = self.episodes.unwrap_or(0) as usize;
 
@@ -312,9 +315,24 @@ impl From<MediaResponse> for Anime {
     }
 }
 
-/// Episode data structure
-#[derive(Debug, Clone)]
-pub struct Episode {
-    pub number: u32,
-    pub title: String,
+/// Convert Anime to the unified Media type
+impl From<Anime> for Media {
+    fn from(anime: Anime) -> Self {
+        Self {
+            media_type: MediaType::Anime,
+            source: MediaSource::AniList {
+                id: anime.id,
+                id_mal: anime.id_mal,
+            },
+            title: anime.title_english.clone().unwrap_or_else(|| anime.title.clone()),
+            title_original: Some(anime.title),
+            imdb_id: None, // Resolved via ARM server when needed
+            year: anime.year,
+            score: anime.score,
+            episodes: anime.episodes,
+            seasons: None, // Anime typically doesn't use seasons in this context
+            cover_image: anime.cover_image,
+            episode_titles: anime.episode_titles,
+        }
+    }
 }
