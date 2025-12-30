@@ -18,16 +18,20 @@ pub enum SourcesAction {
 
 /// Source/torrent selection screen
 pub struct SourcesScreen {
-    pub anime_title: String,
-    pub episode_number: u32,
+    pub title: String,
+    pub episode_number: Option<u32>,
     pub list: SelectableList<Stream>,
 }
 
 impl SourcesScreen {
-    pub fn new(anime_title: String, episode_number: u32, sources: Vec<Stream>) -> Self {
+    pub fn new(title: String, episode_number: u32, sources: Vec<Stream>) -> Self {
         Self {
-            anime_title,
-            episode_number,
+            title,
+            episode_number: if episode_number > 0 {
+                Some(episode_number)
+            } else {
+                None
+            },
             list: SelectableList::new(sources),
         }
     }
@@ -67,18 +71,22 @@ impl SourcesScreen {
             .split(area);
 
         // Title
-        let title = Line::from(vec![
-            Span::styled(&self.anime_title, theme.title()),
-            Span::styled(format!(" - Episode {}", self.episode_number), theme.muted()),
-        ]);
+        let title = if let Some(ep) = self.episode_number {
+            Line::from(vec![
+                Span::styled(&self.title, theme.title()),
+                Span::styled(format!(" - Episode {}", ep), theme.muted()),
+            ])
+        } else {
+            Line::from(vec![Span::styled(&self.title, theme.title())])
+        };
         let title_widget = Paragraph::new(title);
         frame.render_widget(title_widget, chunks[0]);
 
         // Sources list
         if self.list.is_empty() {
             let no_sources = Paragraph::new(Line::from(vec![
-                Span::styled("No sources found for this episode. ", theme.warning()),
-                Span::styled("Try another episode.", theme.muted()),
+                Span::styled("No sources found. ", theme.warning()),
+                Span::styled("Try a different title.", theme.muted()),
             ]));
             frame.render_widget(no_sources, chunks[1]);
         } else {
@@ -86,10 +94,7 @@ impl SourcesScreen {
                 let style = if is_selected { theme.selected() } else { theme.normal() };
                 let muted = theme.muted();
 
-                let cache_indicator = source.cache_indicator();
-                
                 let mut spans = vec![
-                    Span::styled(format!("{} ", cache_indicator), style),
                     Span::styled(format!("[{}]", source.provider), style),
                 ];
 
@@ -115,8 +120,6 @@ impl SourcesScreen {
             Span::styled(" navigate • ", theme.muted()),
             Span::styled("Enter", theme.highlight()),
             Span::styled(" play • ", theme.muted()),
-            Span::styled("🟢 ", theme.success()),
-            Span::styled("cached • ", theme.muted()),
             Span::styled("Esc", theme.highlight()),
             Span::styled(" back", theme.muted()),
         ]);

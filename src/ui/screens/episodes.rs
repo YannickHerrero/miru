@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::api::{Anime, Episode};
+use crate::api::{Episode, Media, Season};
 use crate::ui::components::SelectableList;
 use crate::ui::theme::Theme;
 
@@ -18,16 +18,29 @@ pub enum EpisodesAction {
 
 /// Episode selection screen
 pub struct EpisodesScreen {
-    pub anime: Anime,
+    pub media: Media,
+    pub season: Option<Season>,
     pub list: SelectableList<Episode>,
 }
 
 impl EpisodesScreen {
-    pub fn new(anime: Anime) -> Self {
-        let episodes = anime.get_episodes();
+    /// Create episode screen for anime (no season needed)
+    pub fn new(media: Media) -> Self {
+        let episodes = media.get_episodes();
         Self {
             list: SelectableList::new(episodes),
-            anime,
+            media,
+            season: None,
+        }
+    }
+
+    /// Create episode screen for a specific season (TV shows)
+    pub fn with_season(media: Media, season: Season) -> Self {
+        let episodes = season.get_episodes();
+        Self {
+            list: SelectableList::new(episodes),
+            media,
+            season: Some(season),
         }
     }
 
@@ -53,6 +66,11 @@ impl EpisodesScreen {
         None
     }
 
+    /// Get the season number (defaults to 1 for anime)
+    pub fn season_number(&self) -> u32 {
+        self.season.as_ref().map(|s| s.number).unwrap_or(1)
+    }
+
     /// Render the episodes screen
     pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let chunks = Layout::default()
@@ -65,14 +83,25 @@ impl EpisodesScreen {
             .margin(1)
             .split(area);
 
-        // Title
-        let title = Line::from(vec![
-            Span::styled(self.anime.display_title(), theme.title()),
-            Span::styled(
-                format!(" ({} episodes)", self.list.len()),
-                theme.muted(),
-            ),
-        ]);
+        // Title - show season info if available
+        let title = if let Some(season) = &self.season {
+            Line::from(vec![
+                Span::styled(self.media.display_title(), theme.title()),
+                Span::styled(format!(" - Season {}", season.number), theme.highlight()),
+                Span::styled(
+                    format!(" ({} episodes)", self.list.len()),
+                    theme.muted(),
+                ),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(self.media.display_title(), theme.title()),
+                Span::styled(
+                    format!(" ({} episodes)", self.list.len()),
+                    theme.muted(),
+                ),
+            ])
+        };
         let title_widget = Paragraph::new(title);
         frame.render_widget(title_widget, chunks[0]);
 

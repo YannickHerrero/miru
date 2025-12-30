@@ -52,6 +52,7 @@ impl Theme {
     }
 
     /// Style for success messages
+    #[allow(dead_code)]
     pub fn success(&self) -> Style {
         Style::default().fg(self.success)
     }
@@ -83,6 +84,16 @@ impl Theme {
         Style::default()
             .fg(self.primary)
             .add_modifier(Modifier::BOLD)
+    }
+
+    /// Style for accent (movies)
+    pub fn accent(&self) -> Style {
+        Style::default().fg(self.secondary)
+    }
+
+    /// Style for info (TV shows)
+    pub fn info(&self) -> Style {
+        Style::default().fg(self.success)
     }
 }
 

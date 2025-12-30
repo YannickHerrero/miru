@@ -6,25 +6,25 @@ use ratatui::{
     Frame,
 };
 
-use crate::api::Anime;
+use crate::api::{Media, MediaType};
 use crate::ui::components::SelectableList;
 use crate::ui::theme::{Theme, STAR};
 
 /// Action from results screen
 pub enum ResultsAction {
-    Select(Anime),
+    Select(Media),
     Back,
     Search,
 }
 
-/// Anime search results screen
+/// Search results screen for all media types
 pub struct ResultsScreen {
     pub query: String,
-    pub list: SelectableList<Anime>,
+    pub list: SelectableList<Media>,
 }
 
 impl ResultsScreen {
-    pub fn new(query: String, results: Vec<Anime>) -> Self {
+    pub fn new(query: String, results: Vec<Media>) -> Self {
         Self {
             query,
             list: SelectableList::new(results),
@@ -35,8 +35,8 @@ impl ResultsScreen {
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ResultsAction> {
         match key.code {
             KeyCode::Enter => {
-                if let Some(anime) = self.list.get_selected() {
-                    return Some(ResultsAction::Select(anime.clone()));
+                if let Some(media) = self.list.get_selected() {
+                    return Some(ResultsAction::Select(media.clone()));
                 }
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -85,24 +85,45 @@ impl ResultsScreen {
             ]));
             frame.render_widget(no_results, chunks[1]);
         } else {
-            self.list.render(frame, chunks[1], " Anime ", theme, |anime, is_selected| {
+            self.list.render(frame, chunks[1], " Results ", theme, |media, is_selected| {
                 let style = if is_selected { theme.selected() } else { theme.normal() };
                 let muted = theme.muted();
 
+                // Media type indicator
+                let type_style = match media.media_type {
+                    MediaType::Anime => theme.highlight(),
+                    MediaType::Movie => theme.accent(),
+                    MediaType::TvShow => theme.info(),
+                };
+
                 let mut spans = vec![
-                    Span::styled(anime.display_title().to_string(), style),
+                    Span::styled(format!("[{}] ", media.media_type.label()), type_style),
+                    Span::styled(media.display_title().to_string(), style),
                 ];
 
-                if let Some(score) = anime.score {
-                    spans.push(Span::styled(format!("  {} {:.1}", STAR, score), muted));
+                if let Some(score) = media.score {
+                    if score > 0.0 {
+                        spans.push(Span::styled(format!("  {} {:.1}", STAR, score), muted));
+                    }
                 }
 
-                if let Some(year) = anime.year {
+                if let Some(year) = media.year {
                     spans.push(Span::styled(format!("  {}", year), muted));
                 }
 
-                if let Some(eps) = anime.episodes {
-                    spans.push(Span::styled(format!("  ({} eps)", eps), muted));
+                // Show episode/season count based on media type
+                match media.media_type {
+                    MediaType::Anime => {
+                        if let Some(eps) = media.episodes {
+                            spans.push(Span::styled(format!("  ({} eps)", eps), muted));
+                        }
+                    }
+                    MediaType::TvShow => {
+                        if let Some(seasons) = media.seasons {
+                            spans.push(Span::styled(format!("  ({} seasons)", seasons), muted));
+                        }
+                    }
+                    MediaType::Movie => {}
                 }
 
                 spans

@@ -13,14 +13,17 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use crate::api::{Anime, AnilistClient, Episode, MappingClient, RealDebridClient, Stream, TorrentioClient};
+use crate::api::{
+    AnilistClient, MappingClient, Media, MediaSource, MediaType, RealDebridClient, Season, Stream,
+    TmdbClient, TorrentioClient,
+};
 use crate::config::Config;
 use crate::error::Result;
 use crate::player::Player;
 use crate::ui::components::Spinner;
 use crate::ui::screens::{
     EpisodesAction, EpisodesScreen, ErrorAction, ErrorScreen, ResultsAction, ResultsScreen,
-    SearchScreen, SourcesAction, SourcesScreen,
+    SearchScreen, SeasonsAction, SeasonsScreen, SourcesAction, SourcesScreen,
 };
 use crate::ui::theme::Theme;
 
@@ -28,6 +31,7 @@ use crate::ui::theme::Theme;
 enum Screen {
     Search(SearchScreen),
     Results(ResultsScreen),
+    Seasons(SeasonsScreen),
     Episodes(EpisodesScreen),
     Sources(SourcesScreen),
     Loading(Spinner),
@@ -38,9 +42,15 @@ enum Screen {
 enum PendingOperation {
     None,
     Search(String),
-    FetchEpisodes(Anime),
-    FetchSources(Anime, Episode),
-    ResolveStream(Anime, Episode, Stream),
+    SelectMedia(Media),
+    FetchSeasons(Media),
+    FetchEpisodes(Media, Option<Season>),
+    FetchSources {
+        media: Media,
+        season: u32,
+        episode: u32,
+    },
+    ResolveStream(Stream),
 }
 
 /// Main TUI application
@@ -52,6 +62,7 @@ pub struct App {
     should_quit: bool,
     // API clients
     anilist: AnilistClient,
+    tmdb: TmdbClient,
     mapping: MappingClient,
     torrentio: TorrentioClient,
     #[allow(dead_code)]
@@ -68,6 +79,7 @@ impl App {
             config.real_debrid.api_key.clone(),
         );
         let realdebrid = RealDebridClient::new(config.real_debrid.api_key.clone());
+        let tmdb = TmdbClient::new(config.tmdb.api_key.clone());
         let player = Player::new(config.player.clone());
 
         Self {
@@ -76,6 +88,7 @@ impl App {
             pending: PendingOperation::None,
             should_quit: false,
             anilist: AnilistClient::new(),
+            tmdb,
             mapping: MappingClient::new(),
             torrentio,
             realdebrid,
@@ -141,6 +154,7 @@ impl App {
         match &mut self.screen {
             Screen::Search(screen) => screen.render(frame, area, &self.theme),
             Screen::Results(screen) => screen.render(frame, area, &self.theme),
+            Screen::Seasons(screen) => screen.render(frame, area, &self.theme),
             Screen::Episodes(screen) => screen.render(frame, area, &self.theme),
             Screen::Sources(screen) => screen.render(frame, area, &self.theme),
             Screen::Loading(spinner) => {
@@ -177,15 +191,15 @@ impl App {
             Screen::Search(screen) => {
                 if let Some(query) = screen.handle_key(key) {
                     self.pending = PendingOperation::Search(query.clone());
-                    self.screen = Screen::Loading(Spinner::new("Searching Anilist..."));
+                    self.screen = Screen::Loading(Spinner::new("Searching..."));
                 }
             }
             Screen::Results(screen) => {
                 if let Some(action) = screen.handle_key(key) {
                     match action {
-                        ResultsAction::Select(anime) => {
-                            self.pending = PendingOperation::FetchEpisodes(anime.clone());
-                            self.screen = Screen::Loading(Spinner::new("Loading episodes..."));
+                        ResultsAction::Select(media) => {
+                            self.pending = PendingOperation::SelectMedia(media);
+                            self.screen = Screen::Loading(Spinner::new("Loading..."));
                         }
                         ResultsAction::Back => {
                             self.screen = Screen::Search(SearchScreen::with_query(&screen.query));
@@ -196,16 +210,33 @@ impl App {
                     }
                 }
             }
+            Screen::Seasons(screen) => {
+                if let Some(action) = screen.handle_key(key) {
+                    match action {
+                        SeasonsAction::Select(season) => {
+                            self.pending =
+                                PendingOperation::FetchEpisodes(screen.media.clone(), Some(season));
+                            self.screen = Screen::Loading(Spinner::new("Loading episodes..."));
+                        }
+                        SeasonsAction::Back => {
+                            self.screen = Screen::Search(SearchScreen::new());
+                        }
+                    }
+                }
+            }
             Screen::Episodes(screen) => {
                 if let Some(action) = screen.handle_key(key) {
                     match action {
                         EpisodesAction::Select(episode) => {
-                            self.pending =
-                                PendingOperation::FetchSources(screen.anime.clone(), episode);
+                            let season_num = screen.season_number();
+                            self.pending = PendingOperation::FetchSources {
+                                media: screen.media.clone(),
+                                season: season_num,
+                                episode: episode.number,
+                            };
                             self.screen = Screen::Loading(Spinner::new("Fetching sources..."));
                         }
                         EpisodesAction::Back => {
-                            // Go back to results would require re-searching, so we just go to search
                             self.screen = Screen::Search(SearchScreen::new());
                         }
                     }
@@ -215,29 +246,7 @@ impl App {
                 if let Some(action) = screen.handle_key(key) {
                     match action {
                         SourcesAction::Select(stream) => {
-                            // We need to reconstruct the anime and episode - store them in Sources screen
-                            // For now, we'll use placeholders
-                            self.pending = PendingOperation::ResolveStream(
-                                Anime {
-                                    id: 0,
-                                    id_mal: None,
-                                    title: screen.anime_title.clone(),
-                                    title_english: None,
-                                    title_native: None,
-                                    episodes: None,
-                                    score: None,
-                                    year: None,
-                                    status: None,
-                                    format: None,
-                                    cover_image: None,
-                                    episode_titles: vec![],
-                                },
-                                Episode {
-                                    number: screen.episode_number,
-                                    title: String::new(),
-                                },
-                                stream,
-                            );
+                            self.pending = PendingOperation::ResolveStream(stream);
                             self.screen = Screen::Loading(Spinner::new("Resolving stream..."));
                         }
                         SourcesAction::Back => {
@@ -257,7 +266,6 @@ impl App {
                 if let Some(action) = screen.handle_key(key) {
                     match action {
                         ErrorAction::Retry => {
-                            // Could implement retry logic here
                             self.screen = Screen::Search(SearchScreen::new());
                         }
                         ErrorAction::Back => {
@@ -276,90 +284,252 @@ impl App {
 
         match operation {
             PendingOperation::None => {}
-            PendingOperation::Search(query) => {
-                match self.anilist.search_anime(&query).await {
-                    Ok(results) => {
-                        self.screen = Screen::Results(ResultsScreen::new(query, results));
-                    }
-                    Err(e) => {
-                        self.screen = Screen::Error(ErrorScreen::new(e.to_string(), true));
-                    }
-                }
-            }
-            PendingOperation::FetchEpisodes(anime) => {
-                // We already have episode count from search, so just show episodes
-                self.screen = Screen::Episodes(EpisodesScreen::new(anime));
-            }
-            PendingOperation::FetchSources(anime, episode) => {
-                // Get IMDB ID
-                let imdb_result = self
-                    .mapping
-                    .anilist_to_imdb(anime.id, anime.id_mal)
-                    .await;
 
-                match imdb_result {
-                    Ok(imdb_id) => {
-                        // Fetch streams from Torrentio
-                        // Assume season 1 for now (anime typically uses season 1)
-                        match self
-                            .torrentio
-                            .get_streams(&imdb_id, 1, episode.number)
-                            .await
-                        {
-                            Ok(streams) => {
-                                self.screen = Screen::Sources(SourcesScreen::new(
-                                    anime.display_title().to_string(),
-                                    episode.number,
-                                    streams,
-                                ));
-                            }
-                            Err(e) => {
-                                self.screen =
-                                    Screen::Error(ErrorScreen::new(e.to_string(), true));
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        self.screen = Screen::Error(ErrorScreen::new(e.to_string(), false));
-                    }
-                }
+            PendingOperation::Search(query) => {
+                self.handle_search(&query).await;
             }
-            PendingOperation::ResolveStream(_anime, _episode, stream) => {
-                // With debridoptions=nodownloadlinks, Torrentio only returns cached streams
-                // with direct Real-Debrid URLs that can be played immediately
-                let url = if let Some(url) = &stream.url {
-                    // Direct RD URL - use as-is, no need to unrestrict
-                    Some(url.clone())
-                } else {
+
+            PendingOperation::SelectMedia(media) => {
+                self.handle_select_media(media).await;
+            }
+
+            PendingOperation::FetchSeasons(media) => {
+                self.handle_fetch_seasons(media).await;
+            }
+
+            PendingOperation::FetchEpisodes(media, season) => {
+                self.handle_fetch_episodes(media, season).await;
+            }
+
+            PendingOperation::FetchSources {
+                media,
+                season,
+                episode,
+            } => {
+                self.handle_fetch_sources(media, season, episode).await;
+            }
+
+            PendingOperation::ResolveStream(stream) => {
+                self.handle_resolve_stream(stream).await;
+            }
+        }
+    }
+
+    /// Search both AniList and TMDB, merge results
+    async fn handle_search(&mut self, query: &str) {
+        // Search AniList and TMDB in parallel
+        let (anilist_result, tmdb_result) = tokio::join!(
+            self.anilist.search_anime(query),
+            self.tmdb.search_all(query)
+        );
+
+        let mut results: Vec<Media> = Vec::new();
+
+        // Add AniList results (anime)
+        match anilist_result {
+            Ok(anime_list) => {
+                results.extend(anime_list.into_iter().map(Media::from));
+            }
+            Err(e) => {
+                tracing::warn!("AniList search failed: {}", e);
+            }
+        }
+
+        // Add TMDB results (movies and TV shows)
+        match tmdb_result {
+            Ok(tmdb_list) => {
+                results.extend(tmdb_list);
+            }
+            Err(e) => {
+                tracing::warn!("TMDB search failed: {}", e);
+            }
+        }
+
+        if results.is_empty() {
+            self.screen = Screen::Error(ErrorScreen::new(
+                "No results found. Try a different search term.".to_string(),
+                true,
+            ));
+        } else {
+            // Sort results: prioritize by score (descending), then by year (descending)
+            results.sort_by(|a, b| {
+                let score_a = a.score.unwrap_or(0.0);
+                let score_b = b.score.unwrap_or(0.0);
+                score_b
+                    .partial_cmp(&score_a)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            self.screen = Screen::Results(ResultsScreen::new(query.to_string(), results));
+        }
+    }
+
+    /// Handle media selection based on type
+    async fn handle_select_media(&mut self, media: Media) {
+        match media.media_type {
+            MediaType::Movie => {
+                // Movies go directly to sources (no episode selection)
+                self.pending = PendingOperation::FetchSources {
+                    media,
+                    season: 0,  // Not applicable for movies
+                    episode: 0, // Not applicable for movies
+                };
+            }
+            MediaType::TvShow => {
+                // TV shows need season selection first
+                self.pending = PendingOperation::FetchSeasons(media);
+            }
+            MediaType::Anime => {
+                // Anime goes directly to episode selection (assume season 1)
+                self.pending = PendingOperation::FetchEpisodes(media, None);
+            }
+        }
+    }
+
+    /// Fetch seasons for TV shows
+    async fn handle_fetch_seasons(&mut self, media: Media) {
+        let tmdb_id = match media.tmdb_id() {
+            Some(id) => id,
+            None => {
+                self.screen = Screen::Error(ErrorScreen::new(
+                    "Cannot fetch seasons: no TMDB ID available".to_string(),
+                    false,
+                ));
+                return;
+            }
+        };
+
+        match self.tmdb.get_tv_details(tmdb_id).await {
+            Ok(seasons) => {
+                if seasons.is_empty() {
                     self.screen = Screen::Error(ErrorScreen::new(
-                        "No URL available for this source",
+                        "No seasons found for this show".to_string(),
                         false,
                     ));
-                    return;
-                };
+                } else if seasons.len() == 1 {
+                    // Only one season, skip to episodes
+                    let season = seasons.into_iter().next().unwrap();
+                    self.screen = Screen::Episodes(EpisodesScreen::with_season(media, season));
+                } else {
+                    self.screen = Screen::Seasons(SeasonsScreen::new(media, seasons));
+                }
+            }
+            Err(e) => {
+                self.screen = Screen::Error(ErrorScreen::new(e.to_string(), true));
+            }
+        }
+    }
 
-                if let Some(url) = url {
-                    // Launch player
-                    // First restore terminal
-                    disable_raw_mode().ok();
-                    execute!(io::stdout(), LeaveAlternateScreen).ok();
+    /// Fetch episodes for anime or TV show season
+    async fn handle_fetch_episodes(&mut self, media: Media, season: Option<Season>) {
+        match season {
+            Some(s) => {
+                self.screen = Screen::Episodes(EpisodesScreen::with_season(media, s));
+            }
+            None => {
+                // Anime - use episodes from media directly
+                self.screen = Screen::Episodes(EpisodesScreen::new(media));
+            }
+        }
+    }
 
-                    match self.player.play(&url) {
-                        Ok(()) => {
-                            // Player finished, restore TUI
-                            enable_raw_mode().ok();
-                            execute!(io::stdout(), EnterAlternateScreen).ok();
-                            // Go back to sources screen
-                            self.screen = Screen::Search(SearchScreen::new());
-                        }
-                        Err(e) => {
-                            // Restore TUI even on error
-                            enable_raw_mode().ok();
-                            execute!(io::stdout(), EnterAlternateScreen).ok();
-                            self.screen = Screen::Error(ErrorScreen::new(e.to_string(), false));
-                        }
+    /// Fetch sources from Torrentio
+    async fn handle_fetch_sources(&mut self, media: Media, season: u32, episode: u32) {
+        // Get IMDB ID based on source
+        let imdb_id = match self.get_imdb_id(&media).await {
+            Ok(id) => id,
+            Err(e) => {
+                self.screen = Screen::Error(ErrorScreen::new(e.to_string(), false));
+                return;
+            }
+        };
+
+        // Fetch streams based on media type
+        let streams_result = match media.media_type {
+            MediaType::Movie => self.torrentio.get_movie_streams(&imdb_id).await,
+            MediaType::Anime | MediaType::TvShow => {
+                self.torrentio.get_streams(&imdb_id, season, episode).await
+            }
+        };
+
+        match streams_result {
+            Ok(streams) => {
+                if streams.is_empty() {
+                    self.screen = Screen::Error(ErrorScreen::new(
+                        "No sources found. Try a different title or episode.".to_string(),
+                        false,
+                    ));
+                } else {
+                    let title = media.display_title().to_string();
+                    let ep_num = if media.media_type == MediaType::Movie {
+                        0
+                    } else {
+                        episode
+                    };
+                    self.screen = Screen::Sources(SourcesScreen::new(title, ep_num, streams));
+                }
+            }
+            Err(e) => {
+                self.screen = Screen::Error(ErrorScreen::new(e.to_string(), true));
+            }
+        }
+    }
+
+    /// Get IMDB ID for a media item
+    async fn get_imdb_id(&self, media: &Media) -> std::result::Result<String, crate::error::ApiError> {
+        // If we already have IMDB ID, use it
+        if let Some(imdb_id) = &media.imdb_id {
+            return Ok(imdb_id.clone());
+        }
+
+        match &media.source {
+            MediaSource::AniList { id, id_mal } => {
+                // Use ARM server for anime
+                self.mapping.anilist_to_imdb(*id, *id_mal).await
+            }
+            MediaSource::Tmdb { id } => {
+                // Use TMDB external IDs
+                match media.media_type {
+                    MediaType::Movie => self.tmdb.get_movie_external_ids(*id).await,
+                    MediaType::TvShow => self.tmdb.get_tv_external_ids(*id).await,
+                    MediaType::Anime => {
+                        // Shouldn't happen - anime comes from AniList
+                        Err(crate::error::ApiError::MappingNotFound)
                     }
                 }
+            }
+        }
+    }
+
+    /// Resolve and play stream
+    async fn handle_resolve_stream(&mut self, stream: Stream) {
+        let url = match &stream.url {
+            Some(url) => url.clone(),
+            None => {
+                self.screen = Screen::Error(ErrorScreen::new(
+                    "No URL available for this source".to_string(),
+                    false,
+                ));
+                return;
+            }
+        };
+
+        // Restore terminal before launching player
+        disable_raw_mode().ok();
+        execute!(io::stdout(), LeaveAlternateScreen).ok();
+
+        match self.player.play(&url) {
+            Ok(()) => {
+                // Player finished, restore TUI
+                enable_raw_mode().ok();
+                execute!(io::stdout(), EnterAlternateScreen).ok();
+                self.screen = Screen::Search(SearchScreen::new());
+            }
+            Err(e) => {
+                // Restore TUI even on error
+                enable_raw_mode().ok();
+                execute!(io::stdout(), EnterAlternateScreen).ok();
+                self.screen = Screen::Error(ErrorScreen::new(e.to_string(), false));
             }
         }
     }
