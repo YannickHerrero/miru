@@ -1,6 +1,6 @@
 # miru (見る)
 
-A sleek, terminal-native anime streaming CLI that connects Anilist, Torrentio, Real-Debrid, and MPV into a seamless viewing experience.
+A sleek, terminal-native streaming CLI for anime, movies, and TV shows. Connects AniList, TMDB, Torrentio, Real-Debrid, and MPV into a seamless viewing experience.
 
 ## Demo
 
@@ -8,9 +8,10 @@ https://github.com/user-attachments/assets/3a1e8823-efd3-4894-a0f6-0f9aad33e38f
 
 ## Features
 
+- **Multi-source search**: Anime via AniList, movies and TV shows via TMDB
 - **Fast**: Sub-second startup, minimal keystrokes from launch to playback
 - **Beautiful**: Rich terminal UI with smooth animations and Catppuccin-inspired colors
-- **Simple**: Zero configuration beyond the Real-Debrid API key
+- **Smart flow**: Automatically skips episode selection for movies, shows season selection for TV shows
 - **Reliable**: Graceful error handling with clear feedback
 
 ## Installation
@@ -21,11 +22,16 @@ cargo install --path .
 
 ## Quick Start
 
-1. Get a Real-Debrid API key from https://real-debrid.com/apitoken
+1. Get your API keys:
+   - **Real-Debrid** (required): https://real-debrid.com/apitoken
+   - **TMDB** (optional, for movies/TV): https://www.themoviedb.org/settings/api
+     - Use the **API Key (v3 auth)**, not the Read Access Token
+
 2. Run the setup wizard:
    ```bash
    miru init
    ```
+
 3. Start watching:
    ```bash
    miru
@@ -39,11 +45,13 @@ miru
 
 # Quick search - skip straight to results
 miru search "frieren"
-miru s "frieren"
+miru search "inception"
+miru s "breaking bad"
 
 # Manage configuration
 miru config --show
 miru config --set rd_api_key <KEY>
+miru config --set tmdb_api_key <KEY>
 miru config --reset
 ```
 
@@ -57,13 +65,24 @@ miru config --reset
 | `Esc` / `q` | Back / Quit |
 | `/` | Focus search |
 
+## Search Results
+
+Results are displayed with type indicators:
+
+- `[Anime]` - From AniList (blue)
+- `[Movie]` - From TMDB (pink)
+- `[TV]` - From TMDB (green)
+
 ## Configuration
 
 Configuration is stored at `~/.config/miru/config.toml`:
 
 ```toml
 [real_debrid]
-api_key = "your_api_key_here"
+api_key = "your_real_debrid_api_key"
+
+[tmdb]
+api_key = "your_tmdb_api_key"  # Optional - enables movie/TV search
 
 [torrentio]
 providers = ["yts", "eztv", "rarbg", "1337x", "thepiratebay"]
@@ -82,18 +101,58 @@ theme = "default"
 
 - [MPV](https://mpv.io/) media player (or another compatible player)
 - [Real-Debrid](https://real-debrid.com/) subscription and API key
+- [TMDB API key](https://www.themoviedb.org/settings/api) (optional, for movies and TV shows)
 
 ## How It Works
 
 ```
-User Input → Anilist API → ID Mapping → Torrentio → Real-Debrid → MPV
+                    ┌─────────────┐
+                    │ User Search │
+                    └──────┬──────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+              ▼                         ▼
+        ┌──────────┐             ┌──────────┐
+        │ AniList  │             │   TMDB   │
+        │ (Anime)  │             │(Movies/TV)│
+        └────┬─────┘             └────┬─────┘
+             │                        │
+             ▼                        ▼
+      ┌─────────────┐          ┌─────────────┐
+      │ ARM Server  │          │ TMDB IDs    │
+      │ (ID Mapping)│          │             │
+      └──────┬──────┘          └──────┬──────┘
+             │                        │
+             └───────────┬────────────┘
+                         │
+                         ▼
+                  ┌─────────────┐
+                  │  IMDB ID    │
+                  └──────┬──────┘
+                         │
+                         ▼
+                  ┌─────────────┐
+                  │  Torrentio  │
+                  └──────┬──────┘
+                         │
+                         ▼
+                  ┌─────────────┐
+                  │ Real-Debrid │
+                  └──────┬──────┘
+                         │
+                         ▼
+                  ┌─────────────┐
+                  │     MPV     │
+                  └─────────────┘
 ```
 
-1. Search anime using Anilist's database
-2. Map anime IDs to IMDB IDs via arm-server
-3. Fetch available torrents from Torrentio
-4. Resolve stream URLs through Real-Debrid
-5. Launch MPV with the direct stream
+1. **Search**: Query AniList (anime) and TMDB (movies/TV) simultaneously
+2. **Select**: Choose from unified results with type indicators
+3. **Navigate**: For TV shows, select season then episode; movies skip directly to sources
+4. **Map IDs**: Convert to IMDB IDs (via ARM server for anime, direct from TMDB for movies/TV)
+5. **Fetch sources**: Get available torrents from Torrentio
+6. **Stream**: Resolve through Real-Debrid and play in MPV
 
 ## License
 

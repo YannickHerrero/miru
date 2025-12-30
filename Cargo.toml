@@ -2,10 +2,10 @@
 name = "miru"
 version = "0.1.0"
 edition = "2021"
-description = "A terminal-native anime streaming CLI"
+description = "A terminal-native streaming CLI for anime, movies, and TV shows"
 license = "MIT"
 repository = "https://github.com/yannick/miru"
-keywords = ["anime", "streaming", "cli", "tui"]
+keywords = ["anime", "movies", "streaming", "cli", "tui"]
 categories = ["command-line-utilities"]
 
 [dependencies]
