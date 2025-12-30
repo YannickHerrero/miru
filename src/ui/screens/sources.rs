@@ -208,10 +208,8 @@ impl SourcesScreen {
                 spans.push(Span::styled("[uncached] ", theme.error()));
             }
 
-            spans.push(Span::styled(source.provider.clone(), style));
-
             if let Some(quality) = &source.quality {
-                spans.push(Span::styled(format!(" {}", quality), style));
+                spans.push(Span::styled(format!("[{}]", quality), style));
             }
 
             // Show HDR info in list if available
