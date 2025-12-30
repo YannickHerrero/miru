@@ -35,6 +35,7 @@ pub enum ConfigError {
     Invalid(String),
 
     #[error("Real-Debrid API key is required. Run 'miru init' to set up.")]
+    #[allow(dead_code)]
     MissingApiKey,
 
     #[error("Failed to save config: {0}")]
@@ -55,4 +56,24 @@ pub enum PlayerError {
 
     #[error("Failed to launch player: {0}")]
     LaunchFailed(String),
+}
+
+/// Streaming errors (for direct torrent streaming)
+#[derive(Error, Debug)]
+pub enum StreamingError {
+    #[error("Failed to initialize streaming session: {0}")]
+    SessionInit(String),
+
+    #[error("Failed to add torrent: {0}")]
+    AddTorrent(String),
+
+    #[error("Timeout: {0}")]
+    Timeout(String),
+
+    #[error("No video file found: {0}")]
+    NoVideoFile(String),
+
+    #[error("Streaming error: {0}")]
+    #[allow(dead_code)]
+    Other(String),
 }
