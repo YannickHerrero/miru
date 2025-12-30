@@ -102,46 +102,6 @@ theme = "default"
 - [Real-Debrid](https://real-debrid.com/) subscription and API key
 - [TMDB API key](https://www.themoviedb.org/settings/api)
 
-## How It Works
-
-```
-                    ┌─────────────┐
-                    │ User Search │
-                    └──────┬──────┘
-                           │
-                           ▼
-                     ┌──────────┐
-                     │   TMDB   │
-                     │(Movies/TV)│
-                     └────┬─────┘
-                          │
-                          ▼
-                   ┌─────────────┐
-                   │  IMDB ID    │
-                   └──────┬──────┘
-                          │
-                          ▼
-                   ┌─────────────┐
-                   │  Torrentio  │
-                   └──────┬──────┘
-                          │
-                          ▼
-                   ┌─────────────┐
-                   │ Real-Debrid │
-                   └──────┬──────┘
-                          │
-                          ▼
-                   ┌─────────────┐
-                   │     MPV     │
-                   └─────────────┘
-```
-
-1. **Search**: Query TMDB for movies and TV shows
-2. **Select**: Choose from results with type indicators
-3. **Navigate**: For TV shows, select season then episode; movies skip directly to sources
-4. **Fetch sources**: Get available torrents from Torrentio
-5. **Stream**: Resolve through Real-Debrid and play in MPV
-
 ## License
 
 MIT
