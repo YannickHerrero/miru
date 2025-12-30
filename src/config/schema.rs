@@ -6,6 +6,9 @@ pub struct Config {
     pub real_debrid: RealDebridConfig,
 
     #[serde(default)]
+    pub tmdb: TmdbConfig,
+
+    #[serde(default)]
     pub torrentio: TorrentioConfig,
 
     #[serde(default)]
@@ -16,10 +19,11 @@ pub struct Config {
 }
 
 impl Config {
-    /// Create a new config with just the API key, using defaults for everything else
-    pub fn new(api_key: String) -> Self {
+    /// Create a new config with just the API keys, using defaults for everything else
+    pub fn new(rd_api_key: String, tmdb_api_key: String) -> Self {
         Self {
-            real_debrid: RealDebridConfig { api_key },
+            real_debrid: RealDebridConfig { api_key: rd_api_key },
+            tmdb: TmdbConfig { api_key: tmdb_api_key },
             torrentio: TorrentioConfig::default(),
             player: PlayerConfig::default(),
             ui: UiConfig::default(),
@@ -36,6 +40,20 @@ impl Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealDebridConfig {
     pub api_key: String,
+}
+
+/// TMDB configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TmdbConfig {
+    pub api_key: String,
+}
+
+impl Default for TmdbConfig {
+    fn default() -> Self {
+        Self {
+            api_key: String::new(),
+        }
+    }
 }
 
 /// Torrentio addon configuration
@@ -135,14 +153,15 @@ mod tests {
 
     #[test]
     fn test_config_new() {
-        let config = Config::new("test_key".to_string());
+        let config = Config::new("test_key".to_string(), "tmdb_key".to_string());
         assert_eq!(config.real_debrid.api_key, "test_key");
+        assert_eq!(config.tmdb.api_key, "tmdb_key");
         assert!(config.has_api_key());
     }
 
     #[test]
     fn test_config_empty_key() {
-        let config = Config::new("".to_string());
+        let config = Config::new("".to_string(), "".to_string());
         assert!(!config.has_api_key());
     }
 
@@ -154,9 +173,10 @@ mod tests {
 
     #[test]
     fn test_config_serialization() {
-        let config = Config::new("my_api_key".to_string());
+        let config = Config::new("my_api_key".to_string(), "my_tmdb_key".to_string());
         let toml_str = toml::to_string(&config).unwrap();
         assert!(toml_str.contains("my_api_key"));
+        assert!(toml_str.contains("my_tmdb_key"));
     }
 
     #[test]

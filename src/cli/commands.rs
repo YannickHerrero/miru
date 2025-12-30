@@ -17,7 +17,7 @@ const ASCII_ART: &str = r#"
 /// Run the first-time setup wizard
 pub async fn init() -> Result<()> {
     println!("{}", ASCII_ART);
-    println!("Welcome to miru - your terminal anime streaming companion!\n");
+    println!("Welcome to miru - your terminal streaming companion!\n");
 
     // Check if config already exists
     if config_path().exists() {
@@ -33,27 +33,27 @@ pub async fn init() -> Result<()> {
         }
     }
 
-    // Prompt for API key
+    // Prompt for Real-Debrid API key
     println!("To use miru, you need a Real-Debrid API key.");
     println!("Get yours at: https://real-debrid.com/apitoken\n");
 
     print!("Enter your Real-Debrid API key: ");
     io::stdout().flush()?;
 
-    let mut api_key = String::new();
-    io::stdin().read_line(&mut api_key)?;
-    let api_key = api_key.trim().to_string();
+    let mut rd_api_key = String::new();
+    io::stdin().read_line(&mut rd_api_key)?;
+    let rd_api_key = rd_api_key.trim().to_string();
 
-    if api_key.is_empty() {
+    if rd_api_key.is_empty() {
         println!("API key cannot be empty. Setup cancelled.");
         return Ok(());
     }
 
-    // Validate the API key
-    print!("Validating API key... ");
+    // Validate the Real-Debrid API key
+    print!("Validating Real-Debrid API key... ");
     io::stdout().flush()?;
 
-    let client = RealDebridClient::new(api_key.clone());
+    let client = RealDebridClient::new(rd_api_key.clone());
     match client.validate_key().await {
         Ok(user) => {
             println!("OK!");
@@ -67,8 +67,25 @@ pub async fn init() -> Result<()> {
         }
     }
 
+    // Prompt for TMDB API key
+    println!("\nTo search for movies and TV shows, you need a TMDB API key.");
+    println!("Get yours at: https://www.themoviedb.org/settings/api\n");
+
+    print!("Enter your TMDB API key (or press Enter to skip): ");
+    io::stdout().flush()?;
+
+    let mut tmdb_api_key = String::new();
+    io::stdin().read_line(&mut tmdb_api_key)?;
+    let tmdb_api_key = tmdb_api_key.trim().to_string();
+
+    if tmdb_api_key.is_empty() {
+        println!("Skipping TMDB setup. Only anime search will be available.");
+    } else {
+        println!("TMDB API key saved. Movies and TV shows search enabled!");
+    }
+
     // Save config
-    let config = Config::new(api_key);
+    let config = Config::new(rd_api_key, tmdb_api_key);
     save_config(&config)?;
 
     println!("\nConfiguration saved to: {}", config_path().display());
@@ -97,15 +114,18 @@ pub async fn config(show: bool, set: Option<String>, reset: bool) -> Result<()> 
             return Ok(());
         }
 
-        let mut config = load_config().unwrap_or_else(|_| Config::new(String::new()));
+        let mut config = load_config().unwrap_or_else(|_| Config::new(String::new(), String::new()));
 
         match parts[0] {
             "rd_api_key" => {
                 config.real_debrid.api_key = parts[1].to_string();
             }
+            "tmdb_api_key" => {
+                config.tmdb.api_key = parts[1].to_string();
+            }
             _ => {
                 println!("Unknown key: {}", parts[0]);
-                println!("Available keys: rd_api_key");
+                println!("Available keys: rd_api_key, tmdb_api_key");
                 return Ok(());
             }
         }
@@ -124,6 +144,15 @@ pub async fn config(show: bool, set: Option<String>, reset: bool) -> Result<()> 
                     "api_key = \"{}...\"",
                     &config.real_debrid.api_key[..8.min(config.real_debrid.api_key.len())]
                 );
+                println!("\n[tmdb]");
+                if config.tmdb.api_key.is_empty() {
+                    println!("api_key = (not configured)");
+                } else {
+                    println!(
+                        "api_key = \"{}...\"",
+                        &config.tmdb.api_key[..8.min(config.tmdb.api_key.len())]
+                    );
+                }
                 println!("\n[torrentio]");
                 println!("providers = {:?}", config.torrentio.providers);
                 println!("quality = \"{}\"", config.torrentio.quality);
