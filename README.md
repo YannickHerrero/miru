@@ -4,7 +4,7 @@ A sleek, terminal-native streaming CLI for movies and TV shows. Connects TMDB, T
 
 ## Demo
 
-https://github.com/user-attachments/assets/3a1e8823-efd3-4894-a0f6-0f9aad33e38f
+https://github.com/user-attachments/assets/0fc5c941-bcf2-4b0a-bdbf-791b87337e22
 
 ## Features
 
