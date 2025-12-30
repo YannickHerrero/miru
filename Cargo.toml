@@ -48,6 +48,12 @@ lazy_static = "1"
 # Find executables in PATH
 which = "6"
 
+# Torrent streaming (for direct P2P playback without debrid)
+librqbit = "8.1"
+
+# Temp directories
+tempfile = "3"
+
 [profile.release]
 lto = true
 strip = true
