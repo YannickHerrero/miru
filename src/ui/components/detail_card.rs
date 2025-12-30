@@ -48,7 +48,6 @@ impl DetailCard {
 
         // Type badge with color + Format + Status
         let type_style = match media.media_type {
-            MediaType::Anime => theme.highlight(),
             MediaType::Movie => theme.accent(),
             MediaType::TvShow => theme.info(),
         };
@@ -92,26 +91,18 @@ impl DetailCard {
             lines.push(Line::from(info_spans));
         }
 
-        // Episodes/Seasons
+        // Seasons for TV shows
         let mut count_info: Vec<Span> = Vec::new();
-        match media.media_type {
-            MediaType::Anime => {
-                if let Some(eps) = media.episodes {
-                    count_info.push(Span::styled(format!("{} episodes", eps), theme.muted()));
-                }
+        if media.media_type == MediaType::TvShow {
+            if let Some(seasons) = media.seasons {
+                count_info.push(Span::styled(format!("{} seasons", seasons), theme.muted()));
             }
-            MediaType::TvShow => {
-                if let Some(seasons) = media.seasons {
-                    count_info.push(Span::styled(format!("{} seasons", seasons), theme.muted()));
+            if let Some(eps) = media.episodes {
+                if !count_info.is_empty() {
+                    count_info.push(Span::styled(" / ", theme.muted()));
                 }
-                if let Some(eps) = media.episodes {
-                    if !count_info.is_empty() {
-                        count_info.push(Span::styled(" / ", theme.muted()));
-                    }
-                    count_info.push(Span::styled(format!("{} episodes", eps), theme.muted()));
-                }
+                count_info.push(Span::styled(format!("{} episodes", eps), theme.muted()));
             }
-            MediaType::Movie => {}
         }
 
         if !count_info.is_empty() {

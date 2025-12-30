@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 /// Type of media content
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MediaType {
-    Anime,
     Movie,
     TvShow,
 }
@@ -12,7 +11,6 @@ impl MediaType {
     /// Get a display label for the media type
     pub fn label(&self) -> &'static str {
         match self {
-            MediaType::Anime => "Anime",
             MediaType::Movie => "Movie",
             MediaType::TvShow => "TV",
         }
@@ -22,13 +20,7 @@ impl MediaType {
 /// Source of the media data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MediaSource {
-    AniList {
-        id: i32,
-        id_mal: Option<i32>,
-    },
-    Tmdb {
-        id: i32,
-    },
+    Tmdb { id: i32 },
 }
 
 /// Unified media structure for all content types
@@ -72,11 +64,10 @@ impl Media {
         &self.title
     }
 
-    /// Get the TMDB ID if available
-    pub fn tmdb_id(&self) -> Option<i32> {
+    /// Get the TMDB ID
+    pub fn tmdb_id(&self) -> i32 {
         match &self.source {
-            MediaSource::Tmdb { id } => Some(*id),
-            _ => None,
+            MediaSource::Tmdb { id } => *id,
         }
     }
 

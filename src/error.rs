@@ -6,9 +6,6 @@ pub type Result<T> = anyhow::Result<T>;
 /// API-specific errors with typed variants for matching
 #[derive(Error, Debug)]
 pub enum ApiError {
-    #[error("Anilist API error: {0}")]
-    Anilist(String),
-
     #[error("TMDB API error: {0}")]
     Tmdb(String),
 
@@ -21,10 +18,7 @@ pub enum ApiError {
     #[error("Torrentio error: {0}")]
     Torrentio(String),
 
-    #[error("ID mapping error: {0}")]
-    Mapping(String),
-
-    #[error("Could not find IMDB ID mapping for this title.\n\nThis anime may not have an IMDB entry in the mapping database.\nTry searching with the Japanese or alternative title.")]
+    #[error("Could not find IMDB ID for this title.\n\nThis title may not have an IMDB entry.\nTry searching with an alternative title.")]
     MappingNotFound,
 
     #[error("Network error: {0}")]

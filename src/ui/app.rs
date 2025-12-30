@@ -13,10 +13,7 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use crate::api::{
-    AnilistClient, MappingClient, Media, MediaSource, MediaType, Season, Stream,
-    TmdbClient, TorrentioClient,
-};
+use crate::api::{Media, MediaType, Season, Stream, TmdbClient, TorrentioClient};
 use crate::config::Config;
 use crate::error::Result;
 use crate::player::Player;
@@ -64,9 +61,7 @@ pub struct App {
     pending: PendingOperation,
     should_quit: bool,
     // API clients
-    anilist: AnilistClient,
     tmdb: TmdbClient,
-    mapping: MappingClient,
     torrentio: TorrentioClient,
     player: Player,
     // Theme
@@ -86,9 +81,7 @@ impl App {
             screen: Screen::Search(SearchScreen::new()),
             pending: PendingOperation::None,
             should_quit: false,
-            anilist: AnilistClient::new(),
             tmdb,
-            mapping: MappingClient::new(),
             torrentio,
             player,
             theme: Theme::default(),
@@ -335,52 +328,31 @@ impl App {
         }
     }
 
-    /// Search both AniList and TMDB, merge results
+    /// Search TMDB for movies and TV shows
     async fn handle_search(&mut self, query: &str) {
-        // Search AniList and TMDB in parallel
-        let (anilist_result, tmdb_result) = tokio::join!(
-            self.anilist.search_anime(query),
-            self.tmdb.search_all(query)
-        );
+        match self.tmdb.search_all(query).await {
+            Ok(mut results) => {
+                if results.is_empty() {
+                    self.screen = Screen::Error(ErrorScreen::new(
+                        "No results found. Try a different search term.".to_string(),
+                        true,
+                    ));
+                } else {
+                    // Sort results by score (descending)
+                    results.sort_by(|a, b| {
+                        let score_a = a.score.unwrap_or(0.0);
+                        let score_b = b.score.unwrap_or(0.0);
+                        score_b
+                            .partial_cmp(&score_a)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
 
-        let mut results: Vec<Media> = Vec::new();
-
-        // Add AniList results (anime)
-        match anilist_result {
-            Ok(anime_list) => {
-                results.extend(anime_list.into_iter().map(Media::from));
+                    self.screen = Screen::Results(ResultsScreen::new(query.to_string(), results));
+                }
             }
             Err(e) => {
-                tracing::warn!("AniList search failed: {}", e);
+                self.screen = Screen::Error(ErrorScreen::new(e.to_string(), true));
             }
-        }
-
-        // Add TMDB results (movies and TV shows)
-        match tmdb_result {
-            Ok(tmdb_list) => {
-                results.extend(tmdb_list);
-            }
-            Err(e) => {
-                tracing::warn!("TMDB search failed: {}", e);
-            }
-        }
-
-        if results.is_empty() {
-            self.screen = Screen::Error(ErrorScreen::new(
-                "No results found. Try a different search term.".to_string(),
-                true,
-            ));
-        } else {
-            // Sort results: prioritize by score (descending), then by year (descending)
-            results.sort_by(|a, b| {
-                let score_a = a.score.unwrap_or(0.0);
-                let score_b = b.score.unwrap_or(0.0);
-                score_b
-                    .partial_cmp(&score_a)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-            self.screen = Screen::Results(ResultsScreen::new(query.to_string(), results));
         }
     }
 
@@ -400,25 +372,12 @@ impl App {
                 // TV shows need season selection first
                 self.pending = PendingOperation::FetchSeasons(media);
             }
-            MediaType::Anime => {
-                // Anime goes directly to episode selection (assume season 1)
-                self.pending = PendingOperation::FetchEpisodes(media, None);
-            }
         }
     }
 
     /// Fetch seasons for TV shows
     async fn handle_fetch_seasons(&mut self, media: Media) {
-        let tmdb_id = match media.tmdb_id() {
-            Some(id) => id,
-            None => {
-                self.screen = Screen::Error(ErrorScreen::new(
-                    "Cannot fetch seasons: no TMDB ID available".to_string(),
-                    false,
-                ));
-                return;
-            }
-        };
+        let tmdb_id = media.tmdb_id();
 
         match self.tmdb.get_tv_details(tmdb_id).await {
             Ok(seasons) => {
@@ -441,14 +400,13 @@ impl App {
         }
     }
 
-    /// Fetch episodes for anime or TV show season
+    /// Fetch episodes for TV show season
     async fn handle_fetch_episodes(&mut self, media: Media, season: Option<Season>) {
         match season {
             Some(s) => {
                 self.screen = Screen::Episodes(EpisodesScreen::with_season(media, s));
             }
             None => {
-                // Anime - use episodes from media directly
                 self.screen = Screen::Episodes(EpisodesScreen::new(media));
             }
         }
@@ -476,7 +434,7 @@ impl App {
         // Fetch streams based on media type
         let streams_result = match media.media_type {
             MediaType::Movie => self.torrentio.get_movie_streams(&imdb_id, show_uncached).await,
-            MediaType::Anime | MediaType::TvShow => {
+            MediaType::TvShow => {
                 self.torrentio.get_streams(&imdb_id, season, episode, show_uncached).await
             }
         };
@@ -503,7 +461,7 @@ impl App {
         // Fetch streams based on media type
         let streams_result = match context.media.media_type {
             MediaType::Movie => self.torrentio.get_movie_streams(&context.imdb_id, show_uncached).await,
-            MediaType::Anime | MediaType::TvShow => {
+            MediaType::TvShow => {
                 self.torrentio.get_streams(&context.imdb_id, context.season, context.episode, show_uncached).await
             }
         };
@@ -531,22 +489,10 @@ impl App {
             return Ok(imdb_id.clone());
         }
 
-        match &media.source {
-            MediaSource::AniList { id, id_mal } => {
-                // Use ARM server for anime
-                self.mapping.anilist_to_imdb(*id, *id_mal).await
-            }
-            MediaSource::Tmdb { id } => {
-                // Use TMDB external IDs
-                match media.media_type {
-                    MediaType::Movie => self.tmdb.get_movie_external_ids(*id).await,
-                    MediaType::TvShow => self.tmdb.get_tv_external_ids(*id).await,
-                    MediaType::Anime => {
-                        // Shouldn't happen - anime comes from AniList
-                        Err(crate::error::ApiError::MappingNotFound)
-                    }
-                }
-            }
+        let id = media.tmdb_id();
+        match media.media_type {
+            MediaType::Movie => self.tmdb.get_movie_external_ids(id).await,
+            MediaType::TvShow => self.tmdb.get_tv_external_ids(id).await,
         }
     }
 

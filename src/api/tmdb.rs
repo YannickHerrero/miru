@@ -94,7 +94,7 @@ impl TmdbClient {
         Ok(data.results.into_iter().map(Media::from).collect())
     }
 
-    /// Search for TV shows (excluding animation genre to avoid anime duplicates)
+    /// Search for TV shows
     pub async fn search_tv(&self, query: &str) -> Result<Vec<Media>, ApiError> {
         if !self.is_configured() {
             return Ok(vec![]);
@@ -117,20 +117,7 @@ impl TmdbClient {
             ApiError::Tmdb(format!("Failed to parse response: {}", e))
         })?;
 
-        // Filter out animation (genre_id 16) to avoid anime duplicates
-        // Animation genre is typically anime on TMDB when origin_country includes JP
-        let filtered: Vec<_> = data
-            .results
-            .into_iter()
-            .filter(|tv| {
-                let is_animation = tv.genre_ids.contains(&16);
-                let is_japanese = tv.origin_country.iter().any(|c| c == "JP");
-                // Exclude if it's Japanese animation (likely anime)
-                !(is_animation && is_japanese)
-            })
-            .collect();
-
-        Ok(filtered.into_iter().map(Media::from).collect())
+        Ok(data.results.into_iter().map(Media::from).collect())
     }
 
     /// Search for both movies and TV shows
@@ -264,8 +251,6 @@ struct TvResult {
     overview: Option<String>,
     #[serde(default)]
     genre_ids: Vec<i32>,
-    #[serde(default)]
-    origin_country: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,6 +1,6 @@
 # miru (見る)
 
-A sleek, terminal-native streaming CLI for anime, movies, and TV shows. Connects AniList, TMDB, Torrentio, Real-Debrid, and MPV into a seamless viewing experience.
+A sleek, terminal-native streaming CLI for movies and TV shows. Connects TMDB, Torrentio, Real-Debrid, and MPV into a seamless viewing experience.
 
 ## Demo
 
@@ -8,7 +8,7 @@ https://github.com/user-attachments/assets/3a1e8823-efd3-4894-a0f6-0f9aad33e38f
 
 ## Features
 
-- **Multi-source search**: Anime via AniList, movies and TV shows via TMDB
+- **TMDB search**: Search movies, TV shows, and anime via TMDB
 - **Fast**: Sub-second startup, minimal keystrokes from launch to playback
 - **Beautiful**: Rich terminal UI with smooth animations and Catppuccin-inspired colors
 - **Smart flow**: Automatically skips episode selection for movies, shows season selection for TV shows
@@ -24,7 +24,7 @@ cargo install --path .
 
 1. Get your API keys:
    - **Real-Debrid** (required): https://real-debrid.com/apitoken
-   - **TMDB** (optional, for movies/TV): https://www.themoviedb.org/settings/api
+   - **TMDB** (required): https://www.themoviedb.org/settings/api
      - Use the **API Key (v3 auth)**, not the Read Access Token
 
 2. Run the setup wizard:
@@ -69,9 +69,8 @@ miru config --reset
 
 Results are displayed with type indicators:
 
-- `[Anime]` - From AniList (blue)
-- `[Movie]` - From TMDB (pink)
-- `[TV]` - From TMDB (green)
+- `[Movie]` - Movies (pink)
+- `[TV]` - TV shows and anime (green)
 
 ## Configuration
 
@@ -82,7 +81,7 @@ Configuration is stored at `~/.config/miru/config.toml`:
 api_key = "your_real_debrid_api_key"
 
 [tmdb]
-api_key = "your_tmdb_api_key"  # Optional - enables movie/TV search
+api_key = "your_tmdb_api_key"
 
 [torrentio]
 providers = ["yts", "eztv", "rarbg", "1337x", "thepiratebay"]
@@ -101,7 +100,7 @@ theme = "default"
 
 - [MPV](https://mpv.io/) media player (or another compatible player)
 - [Real-Debrid](https://real-debrid.com/) subscription and API key
-- [TMDB API key](https://www.themoviedb.org/settings/api) (optional, for movies and TV shows)
+- [TMDB API key](https://www.themoviedb.org/settings/api)
 
 ## How It Works
 
@@ -110,49 +109,38 @@ theme = "default"
                     │ User Search │
                     └──────┬──────┘
                            │
-              ┌────────────┴────────────┐
-              │                         │
-              ▼                         ▼
-        ┌──────────┐             ┌──────────┐
-        │ AniList  │             │   TMDB   │
-        │ (Anime)  │             │(Movies/TV)│
-        └────┬─────┘             └────┬─────┘
-             │                        │
-             ▼                        ▼
-      ┌─────────────┐          ┌─────────────┐
-      │ ARM Server  │          │ TMDB IDs    │
-      │ (ID Mapping)│          │             │
-      └──────┬──────┘          └──────┬──────┘
-             │                        │
-             └───────────┬────────────┘
-                         │
-                         ▼
-                  ┌─────────────┐
-                  │  IMDB ID    │
-                  └──────┬──────┘
-                         │
-                         ▼
-                  ┌─────────────┐
-                  │  Torrentio  │
-                  └──────┬──────┘
-                         │
-                         ▼
-                  ┌─────────────┐
-                  │ Real-Debrid │
-                  └──────┬──────┘
-                         │
-                         ▼
-                  ┌─────────────┐
-                  │     MPV     │
-                  └─────────────┘
+                           ▼
+                     ┌──────────┐
+                     │   TMDB   │
+                     │(Movies/TV)│
+                     └────┬─────┘
+                          │
+                          ▼
+                   ┌─────────────┐
+                   │  IMDB ID    │
+                   └──────┬──────┘
+                          │
+                          ▼
+                   ┌─────────────┐
+                   │  Torrentio  │
+                   └──────┬──────┘
+                          │
+                          ▼
+                   ┌─────────────┐
+                   │ Real-Debrid │
+                   └──────┬──────┘
+                          │
+                          ▼
+                   ┌─────────────┐
+                   │     MPV     │
+                   └─────────────┘
 ```
 
-1. **Search**: Query AniList (anime) and TMDB (movies/TV) simultaneously
-2. **Select**: Choose from unified results with type indicators
+1. **Search**: Query TMDB for movies and TV shows
+2. **Select**: Choose from results with type indicators
 3. **Navigate**: For TV shows, select season then episode; movies skip directly to sources
-4. **Map IDs**: Convert to IMDB IDs (via ARM server for anime, direct from TMDB for movies/TV)
-5. **Fetch sources**: Get available torrents from Torrentio
-6. **Stream**: Resolve through Real-Debrid and play in MPV
+4. **Fetch sources**: Get available torrents from Torrentio
+5. **Stream**: Resolve through Real-Debrid and play in MPV
 
 ## License
 

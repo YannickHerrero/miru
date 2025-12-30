@@ -134,7 +134,6 @@ impl ResultsScreen {
 
             // Media type indicator
             let type_style = match media.media_type {
-                MediaType::Anime => theme.highlight(),
                 MediaType::Movie => theme.accent(),
                 MediaType::TvShow => theme.info(),
             };
@@ -154,19 +153,11 @@ impl ResultsScreen {
                 spans.push(Span::styled(format!("  {}", year), muted));
             }
 
-            // Show episode/season count based on media type
-            match media.media_type {
-                MediaType::Anime => {
-                    if let Some(eps) = media.episodes {
-                        spans.push(Span::styled(format!("  ({} eps)", eps), muted));
-                    }
+            // Show season count for TV shows
+            if media.media_type == MediaType::TvShow {
+                if let Some(seasons) = media.seasons {
+                    spans.push(Span::styled(format!("  ({} seasons)", seasons), muted));
                 }
-                MediaType::TvShow => {
-                    if let Some(seasons) = media.seasons {
-                        spans.push(Span::styled(format!("  ({} seasons)", seasons), muted));
-                    }
-                }
-                MediaType::Movie => {}
             }
 
             spans

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-/// miru - A terminal-native anime streaming CLI
+/// miru - A terminal-native streaming CLI for movies and TV shows
 #[derive(Parser)]
 #[command(name = "miru")]
 #[command(author, version, about, long_about = None)]
@@ -30,7 +30,7 @@ pub enum Commands {
         reset: bool,
     },
 
-    /// Search for anime
+    /// Search for movies and TV shows
     #[command(alias = "s")]
     Search {
         /// Search query
@@ -40,7 +40,7 @@ pub enum Commands {
     /// Play first result, first unwatched episode (coming soon)
     #[command(alias = "p")]
     Play {
-        /// Anime to play
+        /// Title to play
         query: String,
     },
 }
