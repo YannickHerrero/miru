@@ -56,6 +56,14 @@ pub struct Media {
     pub cover_image: Option<String>,
     /// Episode titles (if available)
     pub episode_titles: Vec<String>,
+    /// Description/synopsis of the media
+    pub description: Option<String>,
+    /// Status (e.g., "Finished", "Airing", "Released")
+    pub status: Option<String>,
+    /// Format (e.g., "TV", "Movie", "OVA")
+    pub format: Option<String>,
+    /// Genres
+    pub genres: Vec<String>,
 }
 
 impl Media {

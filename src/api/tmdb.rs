@@ -7,6 +7,48 @@ use crate::error::ApiError;
 const TMDB_API_URL: &str = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE: &str = "https://image.tmdb.org/t/p/w185";
 
+/// Map TMDB genre IDs to genre names
+fn genre_name(id: i32) -> Option<&'static str> {
+    match id {
+        28 => Some("Action"),
+        12 => Some("Adventure"),
+        16 => Some("Animation"),
+        35 => Some("Comedy"),
+        80 => Some("Crime"),
+        99 => Some("Documentary"),
+        18 => Some("Drama"),
+        10751 => Some("Family"),
+        14 => Some("Fantasy"),
+        36 => Some("History"),
+        27 => Some("Horror"),
+        10402 => Some("Music"),
+        9648 => Some("Mystery"),
+        10749 => Some("Romance"),
+        878 => Some("Sci-Fi"),
+        10770 => Some("TV Movie"),
+        53 => Some("Thriller"),
+        10752 => Some("War"),
+        37 => Some("Western"),
+        // TV-specific genres
+        10759 => Some("Action & Adventure"),
+        10762 => Some("Kids"),
+        10763 => Some("News"),
+        10764 => Some("Reality"),
+        10765 => Some("Sci-Fi & Fantasy"),
+        10766 => Some("Soap"),
+        10767 => Some("Talk"),
+        10768 => Some("War & Politics"),
+        _ => None,
+    }
+}
+
+/// Convert genre IDs to genre names
+fn genres_from_ids(ids: &[i32]) -> Vec<String> {
+    ids.iter()
+        .filter_map(|&id| genre_name(id).map(String::from))
+        .collect()
+}
+
 /// TMDB API client
 pub struct TmdbClient {
     client: Client,
@@ -202,6 +244,9 @@ struct MovieResult {
     release_date: Option<String>,
     vote_average: Option<f32>,
     poster_path: Option<String>,
+    overview: Option<String>,
+    #[serde(default)]
+    genre_ids: Vec<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -217,6 +262,7 @@ struct TvResult {
     first_air_date: Option<String>,
     vote_average: Option<f32>,
     poster_path: Option<String>,
+    overview: Option<String>,
     #[serde(default)]
     genre_ids: Vec<i32>,
     #[serde(default)]
@@ -267,6 +313,10 @@ impl From<MovieResult> for Media {
             seasons: None,
             cover_image: movie.poster_path.map(|p| format!("{}{}", TMDB_IMAGE_BASE, p)),
             episode_titles: vec![],
+            description: movie.overview,
+            status: Some("Released".to_string()),
+            format: Some("Movie".to_string()),
+            genres: genres_from_ids(&movie.genre_ids),
         }
     }
 }
@@ -291,6 +341,10 @@ impl From<TvResult> for Media {
             seasons: None,  // Fetched with details
             cover_image: tv.poster_path.map(|p| format!("{}{}", TMDB_IMAGE_BASE, p)),
             episode_titles: vec![],
+            description: tv.overview,
+            status: None, // Would need additional API call
+            format: Some("TV".to_string()),
+            genres: genres_from_ids(&tv.genre_ids),
         }
     }
 }

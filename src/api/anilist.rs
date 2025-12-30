@@ -31,11 +31,13 @@ impl AnilistClient {
                             english
                             native
                         }
+                        description(asHtml: false)
                         episodes
                         averageScore
                         seasonYear
                         status
                         format
+                        genres
                         coverImage {
                             medium
                         }
@@ -95,11 +97,13 @@ impl AnilistClient {
                         english
                         native
                     }
+                    description(asHtml: false)
                     episodes
                     averageScore
                     seasonYear
                     status
                     format
+                    genres
                     coverImage {
                         medium
                     }
@@ -196,6 +200,7 @@ struct MediaResponse {
     #[serde(rename = "idMal")]
     id_mal: Option<i32>,
     title: TitleResponse,
+    description: Option<String>,
     episodes: Option<i32>,
     #[serde(rename = "averageScore")]
     average_score: Option<i32>,
@@ -203,6 +208,8 @@ struct MediaResponse {
     season_year: Option<i32>,
     status: Option<String>,
     format: Option<String>,
+    #[serde(default)]
+    genres: Vec<String>,
     #[serde(rename = "coverImage")]
     cover_image: Option<CoverImageResponse>,
     #[serde(rename = "streamingEpisodes")]
@@ -238,13 +245,13 @@ pub struct Anime {
     pub title_english: Option<String>,
     #[allow(dead_code)]
     pub title_native: Option<String>,
+    pub description: Option<String>,
     pub episodes: Option<i32>,
     pub score: Option<f32>,
     pub year: Option<i32>,
-    #[allow(dead_code)]
     pub status: Option<String>,
-    #[allow(dead_code)]
     pub format: Option<String>,
+    pub genres: Vec<String>,
     #[allow(dead_code)]
     pub cover_image: Option<String>,
     pub episode_titles: Vec<String>,
@@ -298,17 +305,33 @@ impl From<MediaResponse> for Anime {
             .filter_map(|ep| ep.title)
             .collect();
 
+        // Clean up description - strip any remaining HTML-like content and normalize whitespace
+        let description = media.description.map(|d| {
+            // Remove any HTML tags that might slip through
+            let re = regex::Regex::new(r"<[^>]+>").unwrap();
+            let cleaned = re.replace_all(&d, "");
+            // Normalize whitespace and newlines
+            cleaned
+                .lines()
+                .map(|l| l.trim())
+                .filter(|l| !l.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        });
+
         Self {
             id: media.id,
             id_mal: media.id_mal,
             title,
             title_english: media.title.english,
             title_native: media.title.native,
+            description,
             episodes: media.episodes,
             score: media.average_score.map(|s| s as f32 / 10.0),
             year: media.season_year,
             status: media.status,
             format: media.format,
+            genres: media.genres,
             cover_image: media.cover_image.and_then(|c| c.medium),
             episode_titles,
         }
@@ -333,6 +356,10 @@ impl From<Anime> for Media {
             seasons: None, // Anime typically doesn't use seasons in this context
             cover_image: anime.cover_image,
             episode_titles: anime.episode_titles,
+            description: anime.description,
+            status: anime.status,
+            format: anime.format,
+            genres: anime.genres,
         }
     }
 }
