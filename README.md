@@ -2,6 +2,10 @@
 
 A sleek, terminal-native anime streaming CLI that connects Anilist, Torrentio, Real-Debrid, and MPV into a seamless viewing experience.
 
+## Demo
+
+https://github.com/user-attachments/assets/3a1e8823-efd3-4894-a0f6-0f9aad33e38f
+
 ## Features
 
 - **Fast**: Sub-second startup, minimal keystrokes from launch to playback
