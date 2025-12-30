@@ -3,6 +3,7 @@ mod cli;
 mod config;
 mod error;
 mod player;
+mod streaming;
 mod ui;
 
 use clap::Parser;
