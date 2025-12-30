@@ -7,8 +7,11 @@ use ratatui::{
 };
 
 use crate::api::Stream;
-use crate::ui::components::SelectableList;
+use crate::ui::components::{SelectableList, StreamDetailCard};
 use crate::ui::theme::Theme;
+
+/// Minimum terminal width to show the detail card
+const MIN_WIDTH_FOR_DETAIL_CARD: u16 = 100;
 
 /// Action from sources screen
 pub enum SourcesAction {
@@ -60,11 +63,13 @@ impl SourcesScreen {
 
     /// Render the sources screen
     pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let show_detail_card = area.width >= MIN_WIDTH_FOR_DETAIL_CARD && !self.list.is_empty();
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(2), // Title
-                Constraint::Min(5),    // Sources list
+                Constraint::Min(5),    // Sources list (and detail card)
                 Constraint::Length(2), // Help text
             ])
             .margin(1)
@@ -82,36 +87,33 @@ impl SourcesScreen {
         let title_widget = Paragraph::new(title);
         frame.render_widget(title_widget, chunks[0]);
 
-        // Sources list
+        // Main content area - split horizontally if wide enough
         if self.list.is_empty() {
             let no_sources = Paragraph::new(Line::from(vec![
                 Span::styled("No sources found. ", theme.warning()),
                 Span::styled("Try a different title.", theme.muted()),
             ]));
             frame.render_widget(no_sources, chunks[1]);
+        } else if show_detail_card {
+            // Two-column layout: list on left, detail card on right
+            let content_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(55), // Sources list
+                    Constraint::Percentage(45), // Detail card
+                ])
+                .split(chunks[1]);
+
+            // Render the list
+            self.render_list(frame, content_chunks[0], theme);
+
+            // Render the detail card for the selected item
+            if let Some(stream) = self.list.get_selected() {
+                StreamDetailCard::render(frame, content_chunks[1], stream, theme);
+            }
         } else {
-            self.list.render(frame, chunks[1], " Select Source ", theme, |source, is_selected| {
-                let style = if is_selected { theme.selected() } else { theme.normal() };
-                let muted = theme.muted();
-
-                let mut spans = vec![
-                    Span::styled(format!("[{}]", source.provider), style),
-                ];
-
-                if let Some(quality) = &source.quality {
-                    spans.push(Span::styled(format!(" {}", quality), style));
-                }
-
-                if let Some(size) = &source.size {
-                    spans.push(Span::styled(format!(" {}", size), muted));
-                }
-
-                if let Some(seeders) = source.seeders {
-                    spans.push(Span::styled(format!(" 👤{}", seeders), muted));
-                }
-
-                spans
-            });
+            // Single column layout - just the list
+            self.render_list(frame, chunks[1], theme);
         }
 
         // Help text
@@ -125,5 +127,46 @@ impl SourcesScreen {
         ]);
         let help_widget = Paragraph::new(help);
         frame.render_widget(help_widget, chunks[2]);
+    }
+
+    /// Render the sources list
+    fn render_list(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        self.list.render(frame, area, " Select Source ", theme, |source, is_selected| {
+            let style = if is_selected { theme.selected() } else { theme.normal() };
+            let muted = theme.muted();
+
+            let mut spans = vec![
+                Span::styled(source.provider.clone(), style),
+            ];
+
+            if let Some(quality) = &source.quality {
+                spans.push(Span::styled(format!(" {}", quality), style));
+            }
+
+            // Show HDR info in list if available
+            if let Some(hdr) = &source.hdr {
+                spans.push(Span::styled(format!(" {}", hdr), theme.warning()));
+            }
+
+            if let Some(size) = &source.size {
+                spans.push(Span::styled(format!(" {}", size), muted));
+            }
+
+            if let Some(seeders) = source.seeders {
+                spans.push(Span::styled(format!(" 👤{}", seeders), muted));
+            }
+
+            // Show languages if available
+            if !source.languages.is_empty() {
+                let lang_display = if source.languages.len() <= 2 {
+                    source.languages.join(", ")
+                } else {
+                    format!("{} langs", source.languages.len())
+                };
+                spans.push(Span::styled(format!(" ({})", lang_display), muted));
+            }
+
+            spans
+        });
     }
 }
