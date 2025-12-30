@@ -91,6 +91,7 @@ fn default_providers() -> Vec<String> {
         "thepiratebay".to_string(),
         "kickasstorrents".to_string(),
         "torrentgalaxy".to_string(),
+        "nyaasi".to_string(),
     ]
 }
 
