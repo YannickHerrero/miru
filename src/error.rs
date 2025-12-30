@@ -25,7 +25,7 @@ pub enum ApiError {
     #[error("ID mapping error: {0}")]
     Mapping(String),
 
-    #[error("Could not find IMDB ID for this title. Try a different one.")]
+    #[error("Could not find IMDB ID mapping for this title.\n\nThis anime may not have an IMDB entry in the mapping database.\nTry searching with the Japanese or alternative title.")]
     MappingNotFound,
 
     #[error("Network error: {0}")]

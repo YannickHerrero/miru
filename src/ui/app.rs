@@ -23,7 +23,7 @@ use crate::player::Player;
 use crate::ui::components::Spinner;
 use crate::ui::screens::{
     EpisodesAction, EpisodesScreen, ErrorAction, ErrorScreen, ResultsAction, ResultsScreen,
-    SearchScreen, SeasonsAction, SeasonsScreen, SourcesAction, SourcesScreen,
+    SearchScreen, SeasonsAction, SeasonsScreen, SourcesAction, SourcesContext, SourcesScreen,
 };
 use crate::ui::theme::Theme;
 
@@ -49,6 +49,11 @@ enum PendingOperation {
         media: Media,
         season: u32,
         episode: u32,
+        show_uncached: bool,
+    },
+    RefetchSources {
+        context: SourcesContext,
+        show_uncached: bool,
     },
     ResolveStream(Stream),
 }
@@ -233,6 +238,7 @@ impl App {
                                 media: screen.media.clone(),
                                 season: season_num,
                                 episode: episode.number,
+                                show_uncached: false,
                             };
                             self.screen = Screen::Loading(Spinner::new("Fetching sources..."));
                         }
@@ -251,6 +257,19 @@ impl App {
                         }
                         SourcesAction::Back => {
                             self.screen = Screen::Search(SearchScreen::new());
+                        }
+                        SourcesAction::ToggleUncached => {
+                            let new_show_uncached = !screen.show_uncached;
+                            self.pending = PendingOperation::RefetchSources {
+                                context: screen.context.clone(),
+                                show_uncached: new_show_uncached,
+                            };
+                            let msg = if new_show_uncached {
+                                "Fetching all sources..."
+                            } else {
+                                "Fetching cached sources..."
+                            };
+                            self.screen = Screen::Loading(Spinner::new(msg));
                         }
                     }
                 }
@@ -305,8 +324,16 @@ impl App {
                 media,
                 season,
                 episode,
+                show_uncached,
             } => {
-                self.handle_fetch_sources(media, season, episode).await;
+                self.handle_fetch_sources(media, season, episode, show_uncached).await;
+            }
+
+            PendingOperation::RefetchSources {
+                context,
+                show_uncached,
+            } => {
+                self.handle_refetch_sources(context, show_uncached).await;
             }
 
             PendingOperation::ResolveStream(stream) => {
@@ -373,6 +400,7 @@ impl App {
                     media,
                     season: 0,  // Not applicable for movies
                     episode: 0, // Not applicable for movies
+                    show_uncached: false,
                 };
             }
             MediaType::TvShow => {
@@ -434,7 +462,7 @@ impl App {
     }
 
     /// Fetch sources from Torrentio
-    async fn handle_fetch_sources(&mut self, media: Media, season: u32, episode: u32) {
+    async fn handle_fetch_sources(&mut self, media: Media, season: u32, episode: u32, show_uncached: bool) {
         // Get IMDB ID based on source
         let imdb_id = match self.get_imdb_id(&media).await {
             Ok(id) => id,
@@ -444,30 +472,58 @@ impl App {
             }
         };
 
+        // Create context for potential re-fetching
+        let context = SourcesContext {
+            media: media.clone(),
+            season,
+            episode,
+            imdb_id: imdb_id.clone(),
+        };
+
         // Fetch streams based on media type
         let streams_result = match media.media_type {
-            MediaType::Movie => self.torrentio.get_movie_streams(&imdb_id).await,
+            MediaType::Movie => self.torrentio.get_movie_streams(&imdb_id, show_uncached).await,
             MediaType::Anime | MediaType::TvShow => {
-                self.torrentio.get_streams(&imdb_id, season, episode).await
+                self.torrentio.get_streams(&imdb_id, season, episode, show_uncached).await
             }
         };
 
         match streams_result {
             Ok(streams) => {
-                if streams.is_empty() {
-                    self.screen = Screen::Error(ErrorScreen::new(
-                        "No sources found. Try a different title or episode.".to_string(),
-                        false,
-                    ));
+                // Always show sources screen, even if empty
+                let title = media.display_title().to_string();
+                let ep_num = if media.media_type == MediaType::Movie {
+                    0
                 } else {
-                    let title = media.display_title().to_string();
-                    let ep_num = if media.media_type == MediaType::Movie {
-                        0
-                    } else {
-                        episode
-                    };
-                    self.screen = Screen::Sources(SourcesScreen::new(title, ep_num, streams));
-                }
+                    episode
+                };
+                self.screen = Screen::Sources(SourcesScreen::new(title, ep_num, streams, context, show_uncached));
+            }
+            Err(e) => {
+                self.screen = Screen::Error(ErrorScreen::new(e.to_string(), true));
+            }
+        }
+    }
+
+    /// Re-fetch sources with different uncached setting
+    async fn handle_refetch_sources(&mut self, context: SourcesContext, show_uncached: bool) {
+        // Fetch streams based on media type
+        let streams_result = match context.media.media_type {
+            MediaType::Movie => self.torrentio.get_movie_streams(&context.imdb_id, show_uncached).await,
+            MediaType::Anime | MediaType::TvShow => {
+                self.torrentio.get_streams(&context.imdb_id, context.season, context.episode, show_uncached).await
+            }
+        };
+
+        match streams_result {
+            Ok(streams) => {
+                let title = context.media.display_title().to_string();
+                let ep_num = if context.media.media_type == MediaType::Movie {
+                    0
+                } else {
+                    context.episode
+                };
+                self.screen = Screen::Sources(SourcesScreen::new(title, ep_num, streams, context, show_uncached));
             }
             Err(e) => {
                 self.screen = Screen::Error(ErrorScreen::new(e.to_string(), true));

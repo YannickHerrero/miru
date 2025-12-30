@@ -75,24 +75,34 @@ impl TorrentioClient {
     }
 
     /// Build the config string for Torrentio URL
-    fn build_config_string(&self) -> String {
+    fn build_config_string(&self, show_uncached: bool) -> String {
         let providers = self.config.providers.join(",");
         // debridoptions=nodownloadlinks ensures only cached/instant streams are returned
         // This means all URLs are direct RD links that can be played immediately
-        format!(
-            "providers={}|sort=qualitysize|qualityfilter=scr,cam|debridoptions=nodownloadlinks|realdebrid={}",
-            providers, self.rd_api_key
-        )
+        // When show_uncached is true, we omit this option to show all available torrents
+        if show_uncached {
+            format!(
+                "providers={}|sort=qualitysize|qualityfilter=scr,cam|realdebrid={}",
+                providers, self.rd_api_key
+            )
+        } else {
+            format!(
+                "providers={}|sort=qualitysize|qualityfilter=scr,cam|debridoptions=nodownloadlinks|realdebrid={}",
+                providers, self.rd_api_key
+            )
+        }
     }
 
     /// Get streams for a series episode
+    /// When `show_uncached` is true, returns all available torrents including uncached ones
     pub async fn get_streams(
         &self,
         imdb_id: &str,
         season: u32,
         episode: u32,
+        show_uncached: bool,
     ) -> Result<Vec<Stream>, ApiError> {
-        let config_str = self.build_config_string();
+        let config_str = self.build_config_string(show_uncached);
         let url = format!(
             "{}/{}/stream/series/{}:{}:{}.json",
             TORRENTIO_URL, config_str, imdb_id, season, episode
@@ -127,8 +137,9 @@ impl TorrentioClient {
     }
 
     /// Get streams for a movie
-    pub async fn get_movie_streams(&self, imdb_id: &str) -> Result<Vec<Stream>, ApiError> {
-        let config_str = self.build_config_string();
+    /// When `show_uncached` is true, returns all available torrents including uncached ones
+    pub async fn get_movie_streams(&self, imdb_id: &str, show_uncached: bool) -> Result<Vec<Stream>, ApiError> {
+        let config_str = self.build_config_string(show_uncached);
         let url = format!(
             "{}/{}/stream/movie/{}.json",
             TORRENTIO_URL, config_str, imdb_id
@@ -218,6 +229,8 @@ pub struct Stream {
     pub source_type: Option<String>,
     /// Available languages (flag emojis)
     pub languages: Vec<String>,
+    /// Whether this stream is cached on Real-Debrid (instant playback)
+    pub is_cached: bool,
 }
 
 impl Stream {
@@ -280,6 +293,10 @@ impl From<StreamResponse> for Stream {
     fn from(resp: StreamResponse) -> Self {
         // Combine name and title for parsing (name often has quality info like "4k DV | HDR")
         let combined = format!("{}\n{}", resp.name, resp.title);
+
+        // Detect if stream is cached based on name prefix
+        // [RD+] = cached, [RD download] or [RD] without + = uncached
+        let is_cached = resp.name.contains("[RD+]") || resp.name.contains("[⚡]");
 
         // Parse provider from name (e.g., "[RD+] nyaasi" -> "nyaasi")
         let provider = resp
@@ -347,6 +364,7 @@ impl From<StreamResponse> for Stream {
             hdr,
             source_type,
             languages,
+            is_cached,
         }
     }
 }
@@ -482,6 +500,7 @@ mod tests {
             hdr: None,
             source_type: None,
             languages: vec![],
+            is_cached: true,
         }
     }
 
@@ -580,5 +599,38 @@ mod tests {
         assert_eq!(make_test_stream(Some("720p")).quality_rank(), 2);
         assert_eq!(make_test_stream(Some("480p")).quality_rank(), 1);
         assert_eq!(make_test_stream(None).quality_rank(), 0);
+    }
+
+    #[test]
+    fn test_cached_detection() {
+        // Cached stream with [RD+]
+        let resp = StreamResponse {
+            name: "[RD+] nyaasi".to_string(),
+            title: "Anime 1080p".to_string(),
+            url: Some("https://example.com".to_string()),
+            info_hash: None,
+            behavior_hints: None,
+        };
+        assert!(Stream::from(resp).is_cached);
+
+        // Uncached stream without [RD+]
+        let resp = StreamResponse {
+            name: "[RD download] nyaasi".to_string(),
+            title: "Anime 1080p".to_string(),
+            url: None,
+            info_hash: Some("abc123".to_string()),
+            behavior_hints: None,
+        };
+        assert!(!Stream::from(resp).is_cached);
+
+        // Cached stream with lightning bolt
+        let resp = StreamResponse {
+            name: "[⚡] 1337x".to_string(),
+            title: "Movie 1080p".to_string(),
+            url: Some("https://example.com".to_string()),
+            info_hash: None,
+            behavior_hints: None,
+        };
+        assert!(Stream::from(resp).is_cached);
     }
 }
