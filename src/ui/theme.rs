@@ -9,8 +9,6 @@ pub struct Theme {
     pub error: Color,
     pub muted: Color,
     pub text: Color,
-    #[allow(dead_code)]
-    pub background: Color,
 }
 
 impl Default for Theme {
@@ -30,7 +28,6 @@ impl Theme {
             error: Color::Rgb(243, 139, 168),      // red #f38ba8
             muted: Color::Rgb(108, 112, 134),      // overlay #6c7086
             text: Color::Rgb(205, 214, 244),       // text #cdd6f4
-            background: Color::Reset,             // terminal default
         }
     }
 
@@ -49,12 +46,6 @@ impl Theme {
     /// Style for muted/secondary text
     pub fn muted(&self) -> Style {
         Style::default().fg(self.muted)
-    }
-
-    /// Style for success messages
-    #[allow(dead_code)]
-    pub fn success(&self) -> Style {
-        Style::default().fg(self.success)
     }
 
     /// Style for warning messages
@@ -102,12 +93,6 @@ pub const ARROW: &str = "❯";
 
 /// Spinner frames for loading animation
 pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-/// Cache status indicators
-#[allow(dead_code)]
-pub const CACHED_INDICATOR: &str = "🟢";
-#[allow(dead_code)]
-pub const NOT_CACHED_INDICATOR: &str = "🟡";
 
 /// Star character for ratings
 pub const STAR: &str = "★";

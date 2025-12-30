@@ -5,7 +5,6 @@ pub type Result<T> = anyhow::Result<T>;
 
 /// API-specific errors with typed variants for matching
 #[derive(Error, Debug)]
-#[allow(dead_code)]
 pub enum ApiError {
     #[error("Anilist API error: {0}")]
     Anilist(String),
@@ -30,14 +29,10 @@ pub enum ApiError {
 
     #[error("Network error: {0}")]
     Network(#[from] reqwest::Error),
-
-    #[error("Request timeout")]
-    Timeout,
 }
 
 /// Configuration errors
 #[derive(Error, Debug)]
-#[allow(dead_code)]
 pub enum ConfigError {
     #[error("Config file not found. Run 'miru init' to set up.")]
     NotFound,
@@ -57,7 +52,6 @@ pub enum ConfigError {
 
 /// Player errors
 #[derive(Error, Debug)]
-#[allow(dead_code)]
 pub enum PlayerError {
     #[error("Player '{0}' not found. Please install it or configure a different player.")]
     NotFound(String),

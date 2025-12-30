@@ -14,7 +14,7 @@ use ratatui::{
 };
 
 use crate::api::{
-    AnilistClient, MappingClient, Media, MediaSource, MediaType, RealDebridClient, Season, Stream,
+    AnilistClient, MappingClient, Media, MediaSource, MediaType, Season, Stream,
     TmdbClient, TorrentioClient,
 };
 use crate::config::Config;
@@ -60,8 +60,6 @@ enum PendingOperation {
 
 /// Main TUI application
 pub struct App {
-    #[allow(dead_code)]
-    config: Config,
     screen: Screen,
     pending: PendingOperation,
     should_quit: bool,
@@ -70,8 +68,6 @@ pub struct App {
     tmdb: TmdbClient,
     mapping: MappingClient,
     torrentio: TorrentioClient,
-    #[allow(dead_code)]
-    realdebrid: RealDebridClient,
     player: Player,
     // Theme
     theme: Theme,
@@ -83,12 +79,10 @@ impl App {
             config.torrentio.clone(),
             config.real_debrid.api_key.clone(),
         );
-        let realdebrid = RealDebridClient::new(config.real_debrid.api_key.clone());
         let tmdb = TmdbClient::new(config.tmdb.api_key.clone());
         let player = Player::new(config.player.clone());
 
         Self {
-            config,
             screen: Screen::Search(SearchScreen::new()),
             pending: PendingOperation::None,
             should_quit: false,
@@ -96,7 +90,6 @@ impl App {
             tmdb,
             mapping: MappingClient::new(),
             torrentio,
-            realdebrid,
             player,
             theme: Theme::default(),
         }

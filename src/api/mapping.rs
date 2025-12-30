@@ -80,11 +80,5 @@ impl Default for MappingClient {
 
 #[derive(Debug, Deserialize)]
 struct MappingResponse {
-    #[allow(dead_code)]
-    anilist: Option<i32>,
-    #[allow(dead_code)]
-    mal: Option<i32>,
     imdb: Option<String>,
-    #[allow(dead_code)]
-    thetvdb: Option<i32>,
 }

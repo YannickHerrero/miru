@@ -1,7 +1,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::api::media::{Episode, Media, MediaSource, MediaType};
+use crate::api::media::{Media, MediaSource, MediaType};
 use crate::error::ApiError;
 
 const ANILIST_URL: &str = "https://graphql.anilist.co";
@@ -29,7 +29,6 @@ impl AnilistClient {
                         title {
                             romaji
                             english
-                            native
                         }
                         description(asHtml: false)
                         episodes
@@ -83,74 +82,6 @@ impl AnilistClient {
 
         Ok(media.into_iter().map(Anime::from).collect())
     }
-
-    /// Get anime details by ID
-    #[allow(dead_code)]
-    pub async fn get_anime(&self, id: i32) -> Result<Anime, ApiError> {
-        let graphql_query = r#"
-            query ($id: Int) {
-                Media(id: $id, type: ANIME) {
-                    id
-                    idMal
-                    title {
-                        romaji
-                        english
-                        native
-                    }
-                    description(asHtml: false)
-                    episodes
-                    averageScore
-                    seasonYear
-                    status
-                    format
-                    genres
-                    coverImage {
-                        medium
-                    }
-                    streamingEpisodes {
-                        title
-                        thumbnail
-                    }
-                }
-            }
-        "#;
-
-        let variables = serde_json::json!({
-            "id": id
-        });
-
-        let response = self
-            .client
-            .post(ANILIST_URL)
-            .json(&serde_json::json!({
-                "query": graphql_query,
-                "variables": variables
-            }))
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(ApiError::Anilist(format!(
-                "HTTP {}",
-                response.status()
-            )));
-        }
-
-        let data: AnilistSingleResponse = response.json().await?;
-
-        if let Some(errors) = data.errors {
-            if let Some(first_error) = errors.first() {
-                return Err(ApiError::Anilist(first_error.message.clone()));
-            }
-        }
-
-        let media = data
-            .data
-            .ok_or_else(|| ApiError::Anilist("No data in response".to_string()))?
-            .media;
-
-        Ok(Anime::from(media))
-    }
 }
 
 impl Default for AnilistClient {
@@ -167,21 +98,9 @@ struct AnilistResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct AnilistSingleResponse {
-    data: Option<AnilistSingleData>,
-    errors: Option<Vec<AnilistError>>,
-}
-
-#[derive(Debug, Deserialize)]
 struct AnilistData {
     #[serde(rename = "Page")]
     page: AnilistPage,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnilistSingleData {
-    #[serde(rename = "Media")]
-    media: MediaResponse,
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,28 +131,17 @@ struct MediaResponse {
     genres: Vec<String>,
     #[serde(rename = "coverImage")]
     cover_image: Option<CoverImageResponse>,
-    #[serde(rename = "streamingEpisodes")]
-    streaming_episodes: Option<Vec<StreamingEpisodeResponse>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct TitleResponse {
     romaji: Option<String>,
     english: Option<String>,
-    #[allow(dead_code)]
-    native: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct CoverImageResponse {
     medium: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct StreamingEpisodeResponse {
-    title: Option<String>,
-    #[allow(dead_code)]
-    thumbnail: Option<String>,
 }
 
 /// Anime data structure
@@ -243,8 +151,6 @@ pub struct Anime {
     pub id_mal: Option<i32>,
     pub title: String,
     pub title_english: Option<String>,
-    #[allow(dead_code)]
-    pub title_native: Option<String>,
     pub description: Option<String>,
     pub episodes: Option<i32>,
     pub score: Option<f32>,
@@ -252,41 +158,7 @@ pub struct Anime {
     pub status: Option<String>,
     pub format: Option<String>,
     pub genres: Vec<String>,
-    #[allow(dead_code)]
     pub cover_image: Option<String>,
-    pub episode_titles: Vec<String>,
-}
-
-impl Anime {
-    /// Get the best display title
-    #[allow(dead_code)]
-    pub fn display_title(&self) -> &str {
-        self.title_english.as_deref().unwrap_or(&self.title)
-    }
-
-    /// Get episode list (either from streaming episodes or generated)
-    #[allow(dead_code)]
-    pub fn get_episodes(&self) -> Vec<Episode> {
-        let count = self.episodes.unwrap_or(0) as usize;
-
-        if !self.episode_titles.is_empty() {
-            self.episode_titles
-                .iter()
-                .enumerate()
-                .map(|(i, title)| Episode {
-                    number: i as u32 + 1,
-                    title: title.clone(),
-                })
-                .collect()
-        } else {
-            (1..=count)
-                .map(|n| Episode {
-                    number: n as u32,
-                    title: format!("Episode {}", n),
-                })
-                .collect()
-        }
-    }
 }
 
 impl From<MediaResponse> for Anime {
@@ -297,13 +169,6 @@ impl From<MediaResponse> for Anime {
             .clone()
             .or(media.title.romaji.clone())
             .unwrap_or_else(|| "Unknown".to_string());
-
-        let episode_titles = media
-            .streaming_episodes
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|ep| ep.title)
-            .collect();
 
         // Clean up description - strip any remaining HTML-like content and normalize whitespace
         let description = media.description.map(|d| {
@@ -324,7 +189,6 @@ impl From<MediaResponse> for Anime {
             id_mal: media.id_mal,
             title,
             title_english: media.title.english,
-            title_native: media.title.native,
             description,
             episodes: media.episodes,
             score: media.average_score.map(|s| s as f32 / 10.0),
@@ -333,7 +197,6 @@ impl From<MediaResponse> for Anime {
             format: media.format,
             genres: media.genres,
             cover_image: media.cover_image.and_then(|c| c.medium),
-            episode_titles,
         }
     }
 }
@@ -355,7 +218,7 @@ impl From<Anime> for Media {
             episodes: anime.episodes,
             seasons: None, // Anime typically doesn't use seasons in this context
             cover_image: anime.cover_image,
-            episode_titles: anime.episode_titles,
+            episode_titles: vec![],
             description: anime.description,
             status: anime.status,
             format: anime.format,

@@ -184,18 +184,6 @@ struct StreamResponse {
     name: String,
     title: String,
     url: Option<String>,
-    #[serde(rename = "infoHash")]
-    info_hash: Option<String>,
-    #[allow(dead_code)]
-    #[serde(rename = "behaviorHints")]
-    behavior_hints: Option<BehaviorHints>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct BehaviorHints {
-    #[serde(rename = "bingeGroup")]
-    binge_group: Option<String>,
 }
 
 /// Parsed stream data
@@ -203,9 +191,6 @@ struct BehaviorHints {
 pub struct Stream {
     /// Provider name (e.g., "nyaasi", "1337x")
     pub provider: String,
-    /// Full title with metadata
-    #[allow(dead_code)]
-    pub title: String,
     /// Quality (e.g., "1080p", "720p")
     pub quality: Option<String>,
     /// File size as string (e.g., "1.2 GB")
@@ -216,9 +201,6 @@ pub struct Stream {
     pub seeders: Option<u32>,
     /// Stream URL (direct or magnet)
     pub url: Option<String>,
-    /// Info hash for magnet links
-    #[allow(dead_code)]
-    pub info_hash: Option<String>,
     /// Video codec (e.g., "HEVC", "x264", "AV1")
     pub video_codec: Option<String>,
     /// Audio format (e.g., "DTS-HD MA 7.1", "TrueHD Atmos")
@@ -234,26 +216,6 @@ pub struct Stream {
 }
 
 impl Stream {
-    /// Get a short display string for the stream
-    #[allow(dead_code)]
-    pub fn display(&self) -> String {
-        let mut parts = vec![format!("[{}]", self.provider)];
-
-        if let Some(q) = &self.quality {
-            parts.push(q.clone());
-        }
-
-        if let Some(s) = &self.size {
-            parts.push(s.clone());
-        }
-
-        if let Some(seeders) = self.seeders {
-            parts.push(format!("👤{}", seeders));
-        }
-
-        parts.join(" ")
-    }
-
     /// Get quality rank for sorting (higher is better)
     pub fn quality_rank(&self) -> u8 {
         match self.quality.as_deref() {
@@ -352,13 +314,11 @@ impl From<StreamResponse> for Stream {
 
         Self {
             provider,
-            title: resp.title,
             quality,
             size,
             size_bytes,
             seeders,
             url: resp.url,
-            info_hash: resp.info_hash,
             video_codec,
             audio,
             hdr,
@@ -488,13 +448,11 @@ mod tests {
     fn make_test_stream(quality: Option<&str>) -> Stream {
         Stream {
             provider: "test".to_string(),
-            title: "test".to_string(),
             quality: quality.map(String::from),
             size: None,
             size_bytes: 0,
             seeders: None,
             url: None,
-            info_hash: None,
             video_codec: None,
             audio: None,
             hdr: None,
@@ -510,8 +468,6 @@ mod tests {
             name: "[RD+] nyaasi".to_string(),
             title: "Frieren S01E01 1080p WEB x264\n👤 150 💾 1.2 GB".to_string(),
             url: Some("https://example.com".to_string()),
-            info_hash: None,
-            behavior_hints: None,
         };
 
         let stream = Stream::from(resp);
@@ -530,8 +486,6 @@ mod tests {
             name: "[RD+] 1337x".to_string(),
             title: "Some Anime 720p\n👤 50 💾 800 MB".to_string(),
             url: None,
-            info_hash: Some("abc123".to_string()),
-            behavior_hints: None,
         };
 
         let stream = Stream::from(resp);
@@ -549,8 +503,6 @@ mod tests {
             name: "Torrentio\n4k DV | HDR".to_string(),
             title: "Movie.2024.2160p.UHD.BluRay.REMUX.HEVC.DTS-HD.MA.7.1-GROUP\n👤 25 💾 45.5 GB".to_string(),
             url: Some("https://example.com".to_string()),
-            info_hash: None,
-            behavior_hints: None,
         };
 
         let stream = Stream::from(resp);
@@ -569,8 +521,6 @@ mod tests {
             name: "Torrentio\n1080p".to_string(),
             title: "Movie.2024.1080p.BluRay.x265\n👤 10 💾 2.5 GB\n🇬🇧 / 🇩🇪".to_string(),
             url: None,
-            info_hash: None,
-            behavior_hints: None,
         };
 
         let stream = Stream::from(resp);
@@ -608,8 +558,6 @@ mod tests {
             name: "[RD+] nyaasi".to_string(),
             title: "Anime 1080p".to_string(),
             url: Some("https://example.com".to_string()),
-            info_hash: None,
-            behavior_hints: None,
         };
         assert!(Stream::from(resp).is_cached);
 
@@ -618,8 +566,6 @@ mod tests {
             name: "[RD download] nyaasi".to_string(),
             title: "Anime 1080p".to_string(),
             url: None,
-            info_hash: Some("abc123".to_string()),
-            behavior_hints: None,
         };
         assert!(!Stream::from(resp).is_cached);
 
@@ -628,8 +574,6 @@ mod tests {
             name: "[⚡] 1337x".to_string(),
             title: "Movie 1080p".to_string(),
             url: Some("https://example.com".to_string()),
-            info_hash: None,
-            behavior_hints: None,
         };
         assert!(Stream::from(resp).is_cached);
     }

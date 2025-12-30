@@ -60,10 +60,4 @@ impl Spinner {
 
         frame.render_widget(paragraph, area);
     }
-
-    /// Update the message
-    #[allow(dead_code)]
-    pub fn set_message(&mut self, message: impl Into<String>) {
-        self.message = message.into();
-    }
 }

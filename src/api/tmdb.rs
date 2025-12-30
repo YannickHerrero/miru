@@ -216,7 +216,6 @@ impl TmdbClient {
             .filter(|s| s.season_number > 0) // Exclude specials (season 0)
             .map(|s| Season {
                 number: s.season_number,
-                name: s.name,
                 episode_count: s.episode_count,
             })
             .collect())
@@ -278,16 +277,11 @@ struct ExternalIdsResponse {
 struct TvDetailsResponse {
     #[serde(default)]
     seasons: Vec<SeasonInfo>,
-    #[allow(dead_code)]
-    number_of_seasons: Option<i32>,
-    #[allow(dead_code)]
-    number_of_episodes: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
 struct SeasonInfo {
     season_number: u32,
-    name: String,
     episode_count: u32,
 }
 

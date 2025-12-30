@@ -59,12 +59,6 @@ pub fn save_config(config: &Config) -> Result<(), ConfigError> {
     Ok(())
 }
 
-/// Check if config file exists
-#[allow(dead_code)]
-pub fn config_exists() -> bool {
-    config_path().exists()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

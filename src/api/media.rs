@@ -72,41 +72,6 @@ impl Media {
         &self.title
     }
 
-    /// Check if this media requires episode selection
-    #[allow(dead_code)]
-    pub fn has_episodes(&self) -> bool {
-        match self.media_type {
-            MediaType::Movie => false,
-            MediaType::Anime | MediaType::TvShow => {
-                self.episodes.map(|e| e > 0).unwrap_or(true)
-            }
-        }
-    }
-
-    /// Check if this media requires season selection (TV shows from TMDB)
-    #[allow(dead_code)]
-    pub fn has_seasons(&self) -> bool {
-        matches!(self.media_type, MediaType::TvShow) && self.seasons.map(|s| s > 1).unwrap_or(false)
-    }
-
-    /// Get the AniList ID if available
-    #[allow(dead_code)]
-    pub fn anilist_id(&self) -> Option<i32> {
-        match &self.source {
-            MediaSource::AniList { id, .. } => Some(*id),
-            _ => None,
-        }
-    }
-
-    /// Get the MAL ID if available
-    #[allow(dead_code)]
-    pub fn mal_id(&self) -> Option<i32> {
-        match &self.source {
-            MediaSource::AniList { id_mal, .. } => *id_mal,
-            _ => None,
-        }
-    }
-
     /// Get the TMDB ID if available
     pub fn tmdb_id(&self) -> Option<i32> {
         match &self.source {
@@ -150,8 +115,6 @@ pub struct Episode {
 #[derive(Debug, Clone)]
 pub struct Season {
     pub number: u32,
-    #[allow(dead_code)]
-    pub name: String,
     pub episode_count: u32,
 }
 

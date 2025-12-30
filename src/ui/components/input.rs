@@ -81,23 +81,9 @@ impl Input {
         self.cursor = self.value.len();
     }
 
-    /// Clear the input
-    #[allow(dead_code)]
-    pub fn clear(&mut self) {
-        self.value.clear();
-        self.cursor = 0;
-    }
-
     /// Get the current value
     pub fn get_value(&self) -> &str {
         &self.value
-    }
-
-    /// Set the value
-    #[allow(dead_code)]
-    pub fn set_value(&mut self, value: String) {
-        self.cursor = value.len();
-        self.value = value;
     }
 
     /// Render the input

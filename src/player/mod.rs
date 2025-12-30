@@ -53,10 +53,4 @@ impl Player {
 
         Ok(())
     }
-
-    /// Get the player command name
-    #[allow(dead_code)]
-    pub fn command(&self) -> &str {
-        &self.config.command
-    }
 }
