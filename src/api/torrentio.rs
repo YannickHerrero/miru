@@ -62,34 +62,64 @@ fn flag_to_language(flag: &str) -> &'static str {
 pub struct TorrentioClient {
     client: Client,
     config: TorrentioConfig,
-    rd_api_key: String,
+    /// Real-Debrid API key (None for direct P2P streaming)
+    rd_api_key: Option<String>,
 }
 
 impl TorrentioClient {
+    /// Create a new client with Real-Debrid support
     pub fn new(config: TorrentioConfig, rd_api_key: String) -> Self {
         Self {
             client: Client::new(),
             config,
-            rd_api_key,
+            rd_api_key: Some(rd_api_key),
         }
+    }
+
+    /// Create a new client for direct P2P streaming (no Real-Debrid)
+    pub fn new_without_debrid(config: TorrentioConfig) -> Self {
+        Self {
+            client: Client::new(),
+            config,
+            rd_api_key: None,
+        }
+    }
+
+    /// Check if this client is configured for Real-Debrid
+    #[allow(dead_code)]
+    pub fn has_debrid(&self) -> bool {
+        self.rd_api_key.is_some()
     }
 
     /// Build the config string for Torrentio URL
     fn build_config_string(&self, show_uncached: bool) -> String {
         let providers = self.config.providers.join(",");
-        // debridoptions=nodownloadlinks ensures only cached/instant streams are returned
-        // This means all URLs are direct RD links that can be played immediately
-        // When show_uncached is true, we omit this option to show all available torrents
-        if show_uncached {
-            format!(
-                "providers={}|sort=qualitysize|qualityfilter=scr,cam|realdebrid={}",
-                providers, self.rd_api_key
-            )
-        } else {
-            format!(
-                "providers={}|sort=qualitysize|qualityfilter=scr,cam|debridoptions=nodownloadlinks|realdebrid={}",
-                providers, self.rd_api_key
-            )
+
+        match &self.rd_api_key {
+            Some(api_key) => {
+                // With Real-Debrid: debridoptions=nodownloadlinks ensures only cached/instant streams are returned
+                // This means all URLs are direct RD links that can be played immediately
+                // When show_uncached is true, we omit this option to show all available torrents
+                if show_uncached {
+                    format!(
+                        "providers={}|sort=qualitysize|qualityfilter=scr,cam|realdebrid={}",
+                        providers, api_key
+                    )
+                } else {
+                    format!(
+                        "providers={}|sort=qualitysize|qualityfilter=scr,cam|debridoptions=nodownloadlinks|realdebrid={}",
+                        providers, api_key
+                    )
+                }
+            }
+            None => {
+                // Without Real-Debrid: request streams without debrid integration
+                // URLs will be magnet links or torrent hashes that we can use for P2P streaming
+                format!(
+                    "providers={}|sort=qualitysize|qualityfilter=scr,cam",
+                    providers
+                )
+            }
         }
     }
 
@@ -180,10 +210,15 @@ struct TorrentioResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct StreamResponse {
     name: String,
     title: String,
     url: Option<String>,
+    /// Torrent info hash (for P2P streaming without debrid)
+    info_hash: Option<String>,
+    /// File index within the torrent (for multi-file torrents)
+    file_idx: Option<usize>,
 }
 
 /// Parsed stream data
@@ -199,8 +234,13 @@ pub struct Stream {
     pub size_bytes: u64,
     /// Number of seeders
     pub seeders: Option<u32>,
-    /// Stream URL (direct or magnet)
+    /// Stream URL (direct HTTP URL from debrid service, or None for P2P)
     pub url: Option<String>,
+    /// Torrent info hash (for P2P streaming without debrid)
+    pub info_hash: Option<String>,
+    /// File index within the torrent (for multi-file torrents)
+    #[allow(dead_code)]
+    pub file_idx: Option<usize>,
     /// Video codec (e.g., "HEVC", "x264", "AV1")
     pub video_codec: Option<String>,
     /// Audio format (e.g., "DTS-HD MA 7.1", "TrueHD Atmos")
@@ -213,6 +253,21 @@ pub struct Stream {
     pub languages: Vec<String>,
     /// Whether this stream is cached on Real-Debrid (instant playback)
     pub is_cached: bool,
+}
+
+impl Stream {
+    /// Get the magnet link for this stream (for P2P streaming)
+    pub fn magnet_link(&self) -> Option<String> {
+        self.info_hash.as_ref().map(|hash| {
+            format!("magnet:?xt=urn:btih:{}", hash)
+        })
+    }
+
+    /// Check if this stream can be played directly (has URL or can be streamed via P2P)
+    #[allow(dead_code)]
+    pub fn is_playable(&self) -> bool {
+        self.url.is_some() || self.info_hash.is_some()
+    }
 }
 
 impl Stream {
@@ -319,6 +374,8 @@ impl From<StreamResponse> for Stream {
             size_bytes,
             seeders,
             url: resp.url,
+            info_hash: resp.info_hash,
+            file_idx: resp.file_idx,
             video_codec,
             audio,
             hdr,
@@ -453,6 +510,8 @@ mod tests {
             size_bytes: 0,
             seeders: None,
             url: None,
+            info_hash: None,
+            file_idx: None,
             video_codec: None,
             audio: None,
             hdr: None,
@@ -468,6 +527,8 @@ mod tests {
             name: "[RD+] nyaasi".to_string(),
             title: "Frieren S01E01 1080p WEB x264\n👤 150 💾 1.2 GB".to_string(),
             url: Some("https://example.com".to_string()),
+            info_hash: None,
+            file_idx: None,
         };
 
         let stream = Stream::from(resp);
@@ -486,6 +547,8 @@ mod tests {
             name: "[RD+] 1337x".to_string(),
             title: "Some Anime 720p\n👤 50 💾 800 MB".to_string(),
             url: None,
+            info_hash: None,
+            file_idx: None,
         };
 
         let stream = Stream::from(resp);
@@ -503,6 +566,8 @@ mod tests {
             name: "Torrentio\n4k DV | HDR".to_string(),
             title: "Movie.2024.2160p.UHD.BluRay.REMUX.HEVC.DTS-HD.MA.7.1-GROUP\n👤 25 💾 45.5 GB".to_string(),
             url: Some("https://example.com".to_string()),
+            info_hash: None,
+            file_idx: None,
         };
 
         let stream = Stream::from(resp);
@@ -521,6 +586,8 @@ mod tests {
             name: "Torrentio\n1080p".to_string(),
             title: "Movie.2024.1080p.BluRay.x265\n👤 10 💾 2.5 GB\n🇬🇧 / 🇩🇪".to_string(),
             url: None,
+            info_hash: None,
+            file_idx: None,
         };
 
         let stream = Stream::from(resp);
@@ -558,6 +625,8 @@ mod tests {
             name: "[RD+] nyaasi".to_string(),
             title: "Anime 1080p".to_string(),
             url: Some("https://example.com".to_string()),
+            info_hash: None,
+            file_idx: None,
         };
         assert!(Stream::from(resp).is_cached);
 
@@ -566,6 +635,8 @@ mod tests {
             name: "[RD download] nyaasi".to_string(),
             title: "Anime 1080p".to_string(),
             url: None,
+            info_hash: Some("abc123".to_string()),
+            file_idx: Some(0),
         };
         assert!(!Stream::from(resp).is_cached);
 
@@ -574,7 +645,34 @@ mod tests {
             name: "[⚡] 1337x".to_string(),
             title: "Movie 1080p".to_string(),
             url: Some("https://example.com".to_string()),
+            info_hash: None,
+            file_idx: None,
         };
         assert!(Stream::from(resp).is_cached);
+    }
+
+    #[test]
+    fn test_magnet_link() {
+        let mut stream = make_test_stream(Some("1080p"));
+        assert!(stream.magnet_link().is_none());
+
+        stream.info_hash = Some("abc123def456".to_string());
+        assert_eq!(
+            stream.magnet_link(),
+            Some("magnet:?xt=urn:btih:abc123def456".to_string())
+        );
+    }
+
+    #[test]
+    fn test_is_playable() {
+        let mut stream = make_test_stream(Some("1080p"));
+        assert!(!stream.is_playable()); // No URL or info_hash
+
+        stream.url = Some("https://example.com".to_string());
+        assert!(stream.is_playable()); // Has URL
+
+        stream.url = None;
+        stream.info_hash = Some("abc123".to_string());
+        assert!(stream.is_playable()); // Has info_hash for P2P
     }
 }
