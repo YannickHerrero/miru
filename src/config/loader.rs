@@ -27,9 +27,8 @@ pub fn load_config() -> Result<Config, ConfigError> {
     let config: Config =
         toml::from_str(&content).map_err(|e| ConfigError::Invalid(e.to_string()))?;
 
-    if !config.has_api_key() {
-        return Err(ConfigError::MissingApiKey);
-    }
+    // Note: Real-Debrid API key is now optional - without it, direct P2P streaming is used
+    // We no longer require an API key for the app to function
 
     Ok(config)
 }

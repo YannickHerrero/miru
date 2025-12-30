@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    /// Real-Debrid configuration (optional - if not set, direct P2P streaming is used)
+    #[serde(default)]
     pub real_debrid: RealDebridConfig,
 
     #[serde(default)]
@@ -16,6 +18,10 @@ pub struct Config {
 
     #[serde(default)]
     pub ui: UiConfig,
+
+    /// Direct P2P streaming configuration (used when Real-Debrid is not configured)
+    #[serde(default)]
+    pub streaming: StreamingConfig,
 }
 
 impl Config {
@@ -27,18 +33,25 @@ impl Config {
             torrentio: TorrentioConfig::default(),
             player: PlayerConfig::default(),
             ui: UiConfig::default(),
+            streaming: StreamingConfig::default(),
         }
     }
 
-    /// Check if the config has a valid API key
-    pub fn has_api_key(&self) -> bool {
+    /// Check if the config has a valid Real-Debrid API key
+    pub fn has_rd_api_key(&self) -> bool {
         !self.real_debrid.api_key.is_empty()
+    }
+
+    /// Check if direct P2P streaming should be used (no RD key configured)
+    pub fn use_direct_streaming(&self) -> bool {
+        !self.has_rd_api_key()
     }
 }
 
 /// Real-Debrid configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RealDebridConfig {
+    #[serde(default)]
     pub api_key: String,
 }
 
@@ -148,6 +161,35 @@ fn default_theme() -> String {
     "default".to_string()
 }
 
+/// Direct P2P streaming configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamingConfig {
+    /// HTTP port for the local streaming server (default: 3131)
+    #[serde(default = "default_streaming_port")]
+    pub http_port: u16,
+
+    /// Whether to delete downloaded files after playback (default: true)
+    #[serde(default = "default_cleanup_after_playback")]
+    pub cleanup_after_playback: bool,
+}
+
+impl Default for StreamingConfig {
+    fn default() -> Self {
+        Self {
+            http_port: default_streaming_port(),
+            cleanup_after_playback: default_cleanup_after_playback(),
+        }
+    }
+}
+
+fn default_streaming_port() -> u16 {
+    3131
+}
+
+fn default_cleanup_after_playback() -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,13 +199,15 @@ mod tests {
         let config = Config::new("test_key".to_string(), "tmdb_key".to_string());
         assert_eq!(config.real_debrid.api_key, "test_key");
         assert_eq!(config.tmdb.api_key, "tmdb_key");
-        assert!(config.has_api_key());
+        assert!(config.has_rd_api_key());
+        assert!(!config.use_direct_streaming());
     }
 
     #[test]
     fn test_config_empty_key() {
         let config = Config::new("".to_string(), "".to_string());
-        assert!(!config.has_api_key());
+        assert!(!config.has_rd_api_key());
+        assert!(config.use_direct_streaming());
     }
 
     #[test]
