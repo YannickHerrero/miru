@@ -13,7 +13,7 @@ categories = ["command-line-utilities"]
 tokio = { version = "1", features = ["full"] }
 
 # HTTP client
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # CLI argument parsing
 clap = { version = "4", features = ["derive"] }
