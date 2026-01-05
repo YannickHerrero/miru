@@ -88,18 +88,12 @@ impl EpisodesScreen {
             Line::from(vec![
                 Span::styled(self.media.display_title(), theme.title()),
                 Span::styled(format!(" - Season {}", season.number), theme.highlight()),
-                Span::styled(
-                    format!(" ({} episodes)", self.list.len()),
-                    theme.muted(),
-                ),
+                Span::styled(format!(" ({} episodes)", self.list.len()), theme.muted()),
             ])
         } else {
             Line::from(vec![
                 Span::styled(self.media.display_title(), theme.title()),
-                Span::styled(
-                    format!(" ({} episodes)", self.list.len()),
-                    theme.muted(),
-                ),
+                Span::styled(format!(" ({} episodes)", self.list.len()), theme.muted()),
             ])
         };
         let title_widget = Paragraph::new(title);
@@ -107,20 +101,31 @@ impl EpisodesScreen {
 
         // Episodes list
         if self.list.is_empty() {
-            let no_episodes = Paragraph::new(Line::from(vec![
-                Span::styled("No episodes found.", theme.warning()),
-            ]));
+            let no_episodes = Paragraph::new(Line::from(vec![Span::styled(
+                "No episodes found.",
+                theme.warning(),
+            )]));
             frame.render_widget(no_episodes, chunks[1]);
         } else {
-            self.list.render(frame, chunks[1], " Episodes ", theme, |episode, is_selected| {
-                let style = if is_selected { theme.selected() } else { theme.normal() };
-                let muted = theme.muted();
+            self.list.render(
+                frame,
+                chunks[1],
+                " Episodes ",
+                theme,
+                |episode, is_selected| {
+                    let style = if is_selected {
+                        theme.selected()
+                    } else {
+                        theme.normal()
+                    };
+                    let muted = theme.muted();
 
-                vec![
-                    Span::styled(format!("{}. ", episode.number), muted),
-                    Span::styled(episode.title.clone(), style),
-                ]
-            });
+                    vec![
+                        Span::styled(format!("{}. ", episode.number), muted),
+                        Span::styled(episode.title.clone(), style),
+                    ]
+                },
+            );
         }
 
         // Help text

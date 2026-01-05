@@ -113,24 +113,20 @@ impl TorrentioClient {
         let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
-            return Err(ApiError::Torrentio(format!(
-                "HTTP {}",
-                response.status()
-            )));
+            return Err(ApiError::Torrentio(format!("HTTP {}", response.status())));
         }
 
-        let data: TorrentioResponse = response.json().await.map_err(|e| {
-            ApiError::Torrentio(format!("Failed to parse response: {}", e))
-        })?;
+        let data: TorrentioResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Torrentio(format!("Failed to parse response: {}", e)))?;
 
         let mut streams: Vec<Stream> = data.streams.into_iter().map(Stream::from).collect();
 
         // Sort by quality (descending), then by size (ascending)
-        streams.sort_by(|a, b| {
-            match b.quality_rank().cmp(&a.quality_rank()) {
-                std::cmp::Ordering::Equal => a.size_bytes.cmp(&b.size_bytes),
-                other => other,
-            }
+        streams.sort_by(|a, b| match b.quality_rank().cmp(&a.quality_rank()) {
+            std::cmp::Ordering::Equal => a.size_bytes.cmp(&b.size_bytes),
+            other => other,
         });
 
         Ok(streams)
@@ -138,7 +134,11 @@ impl TorrentioClient {
 
     /// Get streams for a movie
     /// When `show_uncached` is true, returns all available torrents including uncached ones
-    pub async fn get_movie_streams(&self, imdb_id: &str, show_uncached: bool) -> Result<Vec<Stream>, ApiError> {
+    pub async fn get_movie_streams(
+        &self,
+        imdb_id: &str,
+        show_uncached: bool,
+    ) -> Result<Vec<Stream>, ApiError> {
         let config_str = self.build_config_string(show_uncached);
         let url = format!(
             "{}/{}/stream/movie/{}.json",
@@ -150,24 +150,20 @@ impl TorrentioClient {
         let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
-            return Err(ApiError::Torrentio(format!(
-                "HTTP {}",
-                response.status()
-            )));
+            return Err(ApiError::Torrentio(format!("HTTP {}", response.status())));
         }
 
-        let data: TorrentioResponse = response.json().await.map_err(|e| {
-            ApiError::Torrentio(format!("Failed to parse response: {}", e))
-        })?;
+        let data: TorrentioResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Torrentio(format!("Failed to parse response: {}", e)))?;
 
         let mut streams: Vec<Stream> = data.streams.into_iter().map(Stream::from).collect();
 
         // Sort by quality (descending), then by size (ascending)
-        streams.sort_by(|a, b| {
-            match b.quality_rank().cmp(&a.quality_rank()) {
-                std::cmp::Ordering::Equal => a.size_bytes.cmp(&b.size_bytes),
-                other => other,
-            }
+        streams.sort_by(|a, b| match b.quality_rank().cmp(&a.quality_rank()) {
+            std::cmp::Ordering::Equal => a.size_bytes.cmp(&b.size_bytes),
+            other => other,
         });
 
         Ok(streams)
@@ -270,14 +266,12 @@ impl From<StreamResponse> for Stream {
             .to_string();
 
         // Parse quality from title
-        let quality = QUALITY_RE
-            .find(&combined)
-            .map(|m| m.as_str().to_string());
+        let quality = QUALITY_RE.find(&combined).map(|m| m.as_str().to_string());
 
         // Parse size from title
-        let size = SIZE_RE.captures(&resp.title).map(|caps| {
-            format!("{} {}", &caps[1], &caps[2])
-        });
+        let size = SIZE_RE
+            .captures(&resp.title)
+            .map(|caps| format!("{} {}", &caps[1], &caps[2]));
 
         // Parse size into bytes for sorting
         let size_bytes = size
@@ -332,7 +326,7 @@ impl From<StreamResponse> for Stream {
 /// Parse HDR type from title, normalizing variants
 fn parse_hdr(text: &str) -> Option<String> {
     let mut hdr_types = Vec::new();
-    
+
     for cap in HDR_RE.find_iter(text) {
         let hdr = match cap.as_str().to_uppercase().as_str() {
             "DOVI" | "DV" | "DOLBYVISION" | "DOLBY VISION" | "DOLBY.VISION" => "DV",
@@ -345,7 +339,7 @@ fn parse_hdr(text: &str) -> Option<String> {
             hdr_types.push(hdr.to_string());
         }
     }
-    
+
     if hdr_types.is_empty() {
         None
     } else {
@@ -356,7 +350,7 @@ fn parse_hdr(text: &str) -> Option<String> {
 /// Parse video codec from title, normalizing variants
 fn parse_video_codec(text: &str) -> Option<String> {
     let mut codecs = Vec::new();
-    
+
     for cap in VIDEO_CODEC_RE.find_iter(text) {
         let codec = match cap.as_str().to_uppercase().replace('.', "").as_str() {
             "HEVC" | "H265" | "X265" => "HEVC",
@@ -370,7 +364,7 @@ fn parse_video_codec(text: &str) -> Option<String> {
             codecs.push(codec.to_string());
         }
     }
-    
+
     if codecs.is_empty() {
         None
     } else {
@@ -381,7 +375,7 @@ fn parse_video_codec(text: &str) -> Option<String> {
 /// Parse audio format from title
 fn parse_audio(text: &str) -> Option<String> {
     let mut audio_parts = Vec::new();
-    
+
     // Find audio codec
     if let Some(cap) = AUDIO_RE.find(text) {
         let codec = cap.as_str().to_uppercase();
@@ -408,17 +402,17 @@ fn parse_audio(text: &str) -> Option<String> {
         };
         audio_parts.push(normalized.to_string());
     }
-    
+
     // Check for Atmos separately (can appear with other codecs like TrueHD Atmos)
     if text.to_uppercase().contains("ATMOS") && !audio_parts.contains(&"Atmos".to_string()) {
         audio_parts.push("Atmos".to_string());
     }
-    
+
     // Find channel configuration
     if let Some(cap) = AUDIO_CHANNELS_RE.find(text) {
         audio_parts.push(cap.as_str().to_string());
     }
-    
+
     if audio_parts.is_empty() {
         None
     } else {
@@ -501,7 +495,8 @@ mod tests {
     fn test_parse_stream_with_hdr_and_audio() {
         let resp = StreamResponse {
             name: "Torrentio\n4k DV | HDR".to_string(),
-            title: "Movie.2024.2160p.UHD.BluRay.REMUX.HEVC.DTS-HD.MA.7.1-GROUP\n👤 25 💾 45.5 GB".to_string(),
+            title: "Movie.2024.2160p.UHD.BluRay.REMUX.HEVC.DTS-HD.MA.7.1-GROUP\n👤 25 💾 45.5 GB"
+                .to_string(),
             url: Some("https://example.com".to_string()),
         };
 
@@ -537,7 +532,10 @@ mod tests {
     fn test_parse_size_to_bytes() {
         assert_eq!(parse_size_to_bytes("1 GB"), 1024 * 1024 * 1024);
         assert_eq!(parse_size_to_bytes("800 MB"), 800 * 1024 * 1024);
-        assert_eq!(parse_size_to_bytes("1.5 GB"), (1.5 * 1024.0 * 1024.0 * 1024.0) as u64);
+        assert_eq!(
+            parse_size_to_bytes("1.5 GB"),
+            (1.5 * 1024.0 * 1024.0 * 1024.0) as u64
+        );
         assert_eq!(parse_size_to_bytes("invalid"), u64::MAX);
     }
 

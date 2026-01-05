@@ -110,11 +110,12 @@ pub async fn config(show: bool, set: Option<String>, reset: bool) -> Result<()> 
         let parts: Vec<&str> = key_value.splitn(2, '=').collect();
         if parts.len() != 2 {
             println!("Invalid format. Use: --set key=value");
-            println!("Available keys: rd_api_key");
+            println!("Available keys: rd_api_key, tmdb_api_key, player_command");
             return Ok(());
         }
 
-        let mut config = load_config().unwrap_or_else(|_| Config::new(String::new(), String::new()));
+        let mut config =
+            load_config().unwrap_or_else(|_| Config::new(String::new(), String::new()));
 
         match parts[0] {
             "rd_api_key" => {
@@ -123,9 +124,12 @@ pub async fn config(show: bool, set: Option<String>, reset: bool) -> Result<()> 
             "tmdb_api_key" => {
                 config.tmdb.api_key = parts[1].to_string();
             }
+            "player_command" => {
+                config.player.command = parts[1].to_string();
+            }
             _ => {
                 println!("Unknown key: {}", parts[0]);
-                println!("Available keys: rd_api_key, tmdb_api_key");
+                println!("Available keys: rd_api_key, tmdb_api_key, player_command");
                 return Ok(());
             }
         }
@@ -177,6 +181,11 @@ pub async fn config(show: bool, set: Option<String>, reset: bool) -> Result<()> 
     println!("  --show         Show current configuration");
     println!("  --set KEY=VAL  Set a configuration value");
     println!("  --reset        Reset configuration to defaults");
+    println!();
+    println!("Available keys for --set:");
+    println!("  rd_api_key      Real-Debrid API key");
+    println!("  tmdb_api_key    TMDB API key");
+    println!("  player_command  Media player command (default: mpv)");
 
     Ok(())
 }

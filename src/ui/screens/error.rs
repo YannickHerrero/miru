@@ -64,14 +64,14 @@ impl ErrorScreen {
 
         // Help text
         let mut help_spans = vec![];
-        
+
         if self.can_retry {
             help_spans.extend([
                 Span::styled("r", theme.highlight()),
                 Span::styled(" retry • ", theme.muted()),
             ]);
         }
-        
+
         help_spans.extend([
             Span::styled("Enter/Esc", theme.highlight()),
             Span::styled(" go back", theme.muted()),
