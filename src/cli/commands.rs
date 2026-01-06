@@ -147,6 +147,16 @@ pub async fn init() -> Result<()> {
                 println!("Setup complete!");
                 println!("=========================================\n");
                 println!("Configuration saved to: {}", config_path().display());
+
+                // Warn if MPV is not installed
+                if !mpv_installed {
+                    println!();
+                    println!("WARNING: MPV was not found on your system.");
+                    println!("You can configure the player path in one of two ways:");
+                    println!("  1. Edit ~/.config/miru/config.toml and set player.command");
+                    println!("  2. Run: miru config --set player_command=<path>");
+                }
+
                 println!();
                 println!("Run 'miru' to start watching.");
 
