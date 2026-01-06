@@ -100,6 +100,7 @@ impl InitWizard {
     pub fn new(_config_exists: bool) -> Self {
         let mpv_installed = which::which("mpv").is_ok();
 
+        // Theme::default() uses "auto" mode which will detect terminal background
         Self {
             step: Step::Welcome,
             theme: Theme::default(),

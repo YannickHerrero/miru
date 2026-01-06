@@ -16,7 +16,7 @@ use ratatui::{
 use tokio::sync::RwLock;
 
 use crate::api::{Media, MediaType, Season, Stream, TmdbClient, TorrentioClient};
-use crate::config::Config;
+use crate::config::{save_config, Config};
 use crate::error::Result;
 use crate::history::{WatchHistory, WatchedItem};
 use crate::player::Player;
@@ -27,7 +27,7 @@ use crate::ui::screens::{
     SearchAction, SearchScreen, SeasonsAction, SeasonsScreen, SourcesAction, SourcesContext,
     SourcesScreen,
 };
-use crate::ui::theme::Theme;
+use crate::ui::theme::{Theme, ThemeVariant};
 
 /// Application state
 enum Screen {
@@ -84,6 +84,10 @@ pub struct App {
     player: Player,
     // Theme
     theme: Theme,
+    /// Current theme variant (for cycling)
+    theme_variant: ThemeVariant,
+    /// Full config (for saving theme changes)
+    config: Config,
     /// Whether to use direct P2P streaming (no Real-Debrid)
     #[allow(dead_code)]
     use_direct_streaming: bool,
@@ -122,6 +126,9 @@ impl App {
             .map(|h| h.get_recent_media(10))
             .unwrap_or_default();
 
+        // Parse theme variant from config
+        let theme_variant = ThemeVariant::from_config_string(&config.ui.theme);
+
         Self {
             screen: Screen::Search(SearchScreen::new_with_history(recent_history)),
             pending: PendingOperation::None,
@@ -129,12 +136,29 @@ impl App {
             tmdb,
             torrentio,
             player,
-            theme: Theme::default(),
+            theme: Theme::from_config(&config.ui),
+            theme_variant,
+            config,
             use_direct_streaming,
             torrent_streamer: Arc::new(RwLock::new(None)),
             streaming_port,
             history,
             playback_context: None,
+        }
+    }
+
+    /// Cycle to the next theme variant and persist to config
+    fn cycle_theme(&mut self) {
+        // Cycle to next variant
+        self.theme_variant = self.theme_variant.next();
+
+        // Update the theme
+        self.theme = Theme::from_variant(self.theme_variant);
+
+        // Update config and save
+        self.config.ui.theme = self.theme_variant.to_config_string().to_string();
+        if let Err(e) = save_config(&self.config) {
+            tracing::warn!("Failed to save theme preference: {}", e);
         }
     }
 
@@ -305,6 +329,12 @@ impl App {
         // Global Ctrl+C handler - always quit
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             self.should_quit = true;
+            return Ok(());
+        }
+
+        // Global Ctrl+T handler - cycle theme
+        if key.code == KeyCode::Char('t') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            self.cycle_theme();
             return Ok(());
         }
 

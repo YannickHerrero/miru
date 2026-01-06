@@ -238,18 +238,22 @@ impl SearchScreen {
         let help = if has_history {
             Line::from(vec![
                 Span::styled("Enter", theme.highlight()),
-                Span::styled(" to search ", theme.muted()),
+                Span::styled(" search ", theme.muted()),
                 Span::styled("Tab/Down", theme.highlight()),
                 Span::styled(" history ", theme.muted()),
+                Span::styled("^T", theme.highlight()),
+                Span::styled(" theme ", theme.muted()),
                 Span::styled("Esc", theme.highlight()),
                 Span::styled(" quit", theme.muted()),
             ])
         } else {
             Line::from(vec![
                 Span::styled("Enter", theme.highlight()),
-                Span::styled(" to search ", theme.muted()),
+                Span::styled(" search ", theme.muted()),
+                Span::styled("^T", theme.highlight()),
+                Span::styled(" theme ", theme.muted()),
                 Span::styled("Esc", theme.highlight()),
-                Span::styled(" to quit", theme.muted()),
+                Span::styled(" quit", theme.muted()),
             ])
         };
         let help_widget = Paragraph::new(help);

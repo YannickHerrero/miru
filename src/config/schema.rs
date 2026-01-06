@@ -164,21 +164,77 @@ fn default_player_command() -> String {
 /// UI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiConfig {
-    /// Color theme: "default" | "minimal" | "dracula" | "catppuccin"
-    #[serde(default = "default_theme")]
+    /// Theme mode: "auto", "dark", or "light"
+    /// - "auto": Uses terminal's default ANSI colors (automatically adapts to light/dark)
+    /// - "dark": Use Catppuccin Mocha (optimized for dark backgrounds)
+    /// - "light": Use Catppuccin Latte (optimized for light backgrounds)
+    ///
+    /// Press Ctrl+T at any time to cycle through themes.
+    #[serde(default = "default_theme_mode")]
     pub theme: String,
+
+    /// Custom color overrides (optional)
+    /// These colors override the base theme colors.
+    /// Format: "#RRGGBB" hex colors (e.g., "#89b4fa")
+    #[serde(default)]
+    pub colors: ThemeColors,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
         Self {
-            theme: default_theme(),
+            theme: default_theme_mode(),
+            colors: ThemeColors::default(),
         }
     }
 }
 
-fn default_theme() -> String {
-    "default".to_string()
+fn default_theme_mode() -> String {
+    "auto".to_string()
+}
+
+/// Custom theme colors (all optional - uses base theme defaults if not specified)
+///
+/// All colors should be specified as hex strings in "#RRGGBB" format.
+///
+/// Example in config.toml:
+/// ```text
+/// [ui]
+/// theme = "dark"
+///
+/// [ui.colors]
+/// primary = "#ff6600"
+/// text = "#ffffff"
+/// ```
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ThemeColors {
+    /// Primary color (highlights, selected items, keybindings)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary: Option<String>,
+
+    /// Secondary color (titles, movie badges)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary: Option<String>,
+
+    /// Success color (TV badges, checkmarks)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub success: Option<String>,
+
+    /// Warning color (HDR labels, ratings)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+
+    /// Error color (errors, uncached indicators)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+
+    /// Muted color (secondary text, borders)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub muted: Option<String>,
+
+    /// Text color (normal text)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 /// Direct P2P streaming configuration
@@ -272,13 +328,37 @@ command = "vlc"
 args = ["--fullscreen", "--loop"]
 
 [ui]
-theme = "dracula"
+theme = "dark"
 "#;
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.real_debrid.api_key, "test_key");
         assert_eq!(config.torrentio.providers, vec!["nyaasi"]);
         assert_eq!(config.torrentio.quality, "1080p");
         assert_eq!(config.player.command, "vlc");
-        assert_eq!(config.ui.theme, "dracula");
+        assert_eq!(config.ui.theme, "dark");
+    }
+
+    #[test]
+    fn test_config_ui_custom_colors() {
+        let toml_str = r##"
+[ui]
+theme = "dark"
+
+[ui.colors]
+primary = "#ff6600"
+text = "#ffffff"
+"##;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.ui.theme, "dark");
+        assert_eq!(config.ui.colors.primary, Some("#ff6600".to_string()));
+        assert_eq!(config.ui.colors.text, Some("#ffffff".to_string()));
+        assert_eq!(config.ui.colors.secondary, None);
+    }
+
+    #[test]
+    fn test_config_ui_auto_theme() {
+        let config = UiConfig::default();
+        assert_eq!(config.theme, "auto");
+        assert!(config.colors.primary.is_none());
     }
 }

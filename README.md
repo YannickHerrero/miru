@@ -10,10 +10,11 @@ https://github.com/user-attachments/assets/0fc5c941-bcf2-4b0a-bdbf-791b87337e22
 
 - **TMDB search**: Search movies, TV shows, and anime via TMDB
 - **Fast**: Sub-second startup, minimal keystrokes from launch to playback
-- **Beautiful**: Rich terminal UI with smooth animations and Catppuccin-inspired colors
+- **Beautiful**: Rich terminal UI with smooth animations and Catppuccin-inspired colors that adapt to your terminal's light/dark theme
 - **Smart flow**: Automatically skips episode selection for movies, shows season selection for TV shows
 - **Reliable**: Graceful error handling with clear feedback
 - **Flexible streaming**: Works with Real-Debrid for instant cached playback, or direct P2P streaming without any account
+- **Customizable**: Full theme customization with support for custom colors
 
 ## Installation
 
@@ -82,6 +83,7 @@ miru config --reset
 | `Enter` | Select |
 | `Esc` / `q` | Back / Quit |
 | `/` | Focus search |
+| `Ctrl+T` | Cycle theme (auto/dark/light) |
 
 ## Search Results
 
@@ -92,31 +94,55 @@ Results are displayed with type indicators:
 
 ## Configuration
 
-Configuration is stored at `~/.config/miru/config.toml`:
+Configuration is stored at `~/.config/miru/config.toml`. Here's a full example with all available options:
 
 ```toml
 [real_debrid]
 api_key = "your_real_debrid_api_key"  # Optional - leave empty for P2P streaming
 
 [tmdb]
-api_key = "your_tmdb_api_key"
+api_key = "your_tmdb_api_key"  # Required
 
 [torrentio]
-providers = ["yts", "eztv", "rarbg", "1337x", "thepiratebay"]
-quality = "best"
-sort = "quality"
+providers = ["yts", "eztv", "rarbg", "1337x", "thepiratebay", "kickasstorrents", "torrentgalaxy", "nyaasi"]
+quality = "best"  # "best", "1080p", "720p", "480p"
+sort = "quality"  # "quality", "size", "seeders"
 
 [player]
 command = "mpv"
 args = ["--fullscreen"]
 
-[ui]
-theme = "default"
-
 [streaming]
 http_port = 3131              # Port for P2P streaming server
 cleanup_after_playback = true # Delete downloaded files after playback
+
+[ui]
+theme = "auto"  # "auto", "dark", "light"
+
+# Optional: custom color overrides (hex format)
+[ui.colors]
+# primary = "#89b4fa"    # Highlights, selected items
+# secondary = "#f5c2e7"  # Titles, movie badges
+# success = "#a6e3a1"    # TV badges, checkmarks
+# warning = "#f9e2af"    # HDR labels, ratings
+# error = "#f38ba8"      # Error messages
+# muted = "#6c7086"      # Secondary text, borders
+# text = "#cdd6f4"       # Normal text
 ```
+
+### Theme Configuration
+
+Miru supports three theme modes. Press `Ctrl+T` at any time to cycle through them:
+
+| Theme | Description |
+|-------|-------------|
+| `auto` | (Default) Uses terminal's default ANSI colors - automatically adapts to your terminal's light/dark theme |
+| `dark` | Catppuccin Mocha with specific RGB colors optimized for dark backgrounds |
+| `light` | Catppuccin Latte with specific RGB colors optimized for light backgrounds |
+
+Theme changes are saved automatically to your config file.
+
+You can also override individual colors using the `[ui.colors]` section with hex color codes (`#RRGGBB`).
 
 ### Streaming Modes
 
