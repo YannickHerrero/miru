@@ -38,10 +38,10 @@ pub async fn init() -> Result<()> {
     println!("  1. Direct P2P Streaming (free, no account needed)");
     println!("     - Download torrents directly to your device");
     println!("     - No Real-Debrid account required\n");
-    println!("  2. Real-Debrid Cached (faster, requires account)");
+    println!("  2. Real-Debrid Cached (faster, paid subscription required)");
     println!("     - Access cached torrents on Real-Debrid servers");
     println!("     - Faster speeds, less bandwidth usage");
-    println!("     - Get a free account at: https://real-debrid.com\n");
+    println!("     - Requires a paid Real-Debrid subscription at: https://real-debrid.com\n");
 
     print!("Enter your Real-Debrid API key (or press Enter to use direct P2P): ");
     io::stdout().flush()?;

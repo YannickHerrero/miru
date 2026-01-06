@@ -24,22 +24,23 @@ cargo install --path .
 ## Quick Start
 
 1. Get your API keys:
-   - **TMDB** (required): https://www.themoviedb.org/settings/api
-     - Needed to search for movies, TV shows, and anime
-     - Use the **API Key (v3 auth)**, not the Read Access Token
-   - **Real-Debrid** (optional): https://real-debrid.com/apitoken
-     - Provides instant cached playback for popular content
-     - Without it, miru uses direct P2P streaming (may require buffering while downloading)
+    - **TMDB** (required): https://www.themoviedb.org/settings/api
+      - Needed to search for movies, TV shows, and anime
+      - Use the **API Key (v3 auth)**, not the Read Access Token
+    - **Real-Debrid** (optional, paid subscription): https://real-debrid.com/apitoken
+      - Provides instant cached playback for popular content
+      - Requires a paid Real-Debrid subscription
+      - Without it, miru uses direct P2P streaming (may require buffering while downloading)
 
 2. Run the setup wizard:
    ```bash
    miru init
    ```
-   During setup:
-   - TMDB key is **required** to enable search functionality
-   - Real-Debrid is **optional** - choose between:
-     - **Direct P2P Streaming** (free): Download torrents directly to your device
-     - **Real-Debrid Cached** (faster): Access cached torrents on Real-Debrid servers
+    During setup:
+    - TMDB key is **required** to enable search functionality
+    - Real-Debrid is **optional** - choose between:
+      - **Direct P2P Streaming** (free): Download torrents directly to your device
+      - **Real-Debrid Cached** (requires paid subscription): Access cached torrents on Real-Debrid servers
 
 3. Start watching:
    ```bash
