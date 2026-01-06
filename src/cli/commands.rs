@@ -74,7 +74,9 @@ pub async fn init() -> Result<()> {
     // =========================================
     println!("Step 1/2: Real-Debrid (optional)\n");
     println!("Real-Debrid provides faster cached streaming for popular content.");
-    println!("Without it, miru uses direct P2P streaming (free, but may buffer).\n");
+    println!("Without it, miru uses direct P2P streaming (free, but may buffer).");
+    println!();
+    println!("Get your API key at: https://real-debrid.com/apitoken\n");
 
     print!("Enter your Real-Debrid API key (or press Enter to skip): ");
     io::stdout().flush()?;
@@ -110,7 +112,10 @@ pub async fn init() -> Result<()> {
     // Step 3: TMDB API key (required)
     // =========================================
     println!("Step 2/2: TMDB (required)\n");
-    println!("TMDB is required to search for movies, TV shows, and anime.\n");
+    println!("TMDB is required to search for movies, TV shows, and anime.");
+    println!();
+    println!("Get your API key at: https://www.themoviedb.org/settings/api");
+    println!("Use the \"API Key (v3 auth)\", not the Read Access Token.\n");
 
     loop {
         print!("Enter your TMDB API key: ");
