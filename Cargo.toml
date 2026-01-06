@@ -1,6 +1,6 @@
 [package]
 name = "miru"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A terminal-native streaming CLI for anime, movies, and TV shows"
 license = "MIT"

@@ -49,7 +49,7 @@ pub async fn init() -> Result<()> {
     }
 
     println!();
-    println!("  [x] TMDB API key (required, free)");
+    println!("  [ ] TMDB API key (required, free)");
     println!("      Get yours at: https://www.themoviedb.org/settings/api");
     println!("      Use the \"API Key (v3 auth)\", not the Read Access Token.");
     println!();
