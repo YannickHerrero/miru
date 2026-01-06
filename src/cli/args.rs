@@ -6,6 +6,10 @@ use clap::{Parser, Subcommand};
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
 pub struct Cli {
+    /// Use VLC instead of mpv for playback
+    #[arg(long, global = true)]
+    pub vlc: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

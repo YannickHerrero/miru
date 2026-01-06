@@ -157,6 +157,16 @@ impl Default for PlayerConfig {
     }
 }
 
+impl PlayerConfig {
+    /// Create a VLC player configuration with sensible defaults
+    pub fn vlc() -> Self {
+        Self {
+            command: "vlc".to_string(),
+            args: vec!["--fullscreen".to_string(), "--play-and-exit".to_string()],
+        }
+    }
+}
+
 fn default_player_command() -> String {
     "mpv".to_string()
 }

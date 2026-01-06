@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::config::{config_path, load_config, save_config, Config};
+use crate::config::{config_path, load_config, save_config, Config, PlayerConfig};
 use crate::error::Result;
 use crate::ui::{App, InitWizard};
 
@@ -132,8 +132,11 @@ pub async fn config(show: bool, set: Option<String>, reset: bool) -> Result<()> 
 }
 
 /// Handle the search command
-pub async fn search(query: Option<String>) -> Result<()> {
-    let config = load_config()?;
+pub async fn search(query: Option<String>, player_override: Option<PlayerConfig>) -> Result<()> {
+    let mut config = load_config()?;
+    if let Some(player_config) = player_override {
+        config.player = player_config;
+    }
     let mut app = App::new(config);
 
     if let Some(q) = query {
@@ -144,8 +147,8 @@ pub async fn search(query: Option<String>) -> Result<()> {
 }
 
 /// Run interactive mode (default)
-pub async fn interactive() -> Result<()> {
-    let config = match load_config() {
+pub async fn interactive(player_override: Option<PlayerConfig>) -> Result<()> {
+    let mut config = match load_config() {
         Ok(c) => c,
         Err(_) => {
             println!("No configuration found. Running setup...\n");
@@ -153,6 +156,10 @@ pub async fn interactive() -> Result<()> {
             return Ok(());
         }
     };
+
+    if let Some(player_config) = player_override {
+        config.player = player_config;
+    }
 
     let mut app = App::new(config);
     app.run().await
