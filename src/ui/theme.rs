@@ -21,13 +21,13 @@ impl Theme {
     /// Catppuccin Mocha inspired theme
     pub fn catppuccin() -> Self {
         Self {
-            primary: Color::Rgb(137, 180, 250),    // blue #89b4fa
-            secondary: Color::Rgb(245, 194, 231),  // pink #f5c2e7
-            success: Color::Rgb(166, 227, 161),    // green #a6e3a1
-            warning: Color::Rgb(249, 226, 175),    // yellow #f9e2af
-            error: Color::Rgb(243, 139, 168),      // red #f38ba8
-            muted: Color::Rgb(108, 112, 134),      // overlay #6c7086
-            text: Color::Rgb(205, 214, 244),       // text #cdd6f4
+            primary: Color::Rgb(137, 180, 250),   // blue #89b4fa
+            secondary: Color::Rgb(245, 194, 231), // pink #f5c2e7
+            success: Color::Rgb(166, 227, 161),   // green #a6e3a1
+            warning: Color::Rgb(249, 226, 175),   // yellow #f9e2af
+            error: Color::Rgb(243, 139, 168),     // red #f38ba8
+            muted: Color::Rgb(108, 112, 134),     // overlay #6c7086
+            text: Color::Rgb(205, 214, 244),      // text #cdd6f4
         }
     }
 

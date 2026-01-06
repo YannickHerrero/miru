@@ -40,10 +40,7 @@ impl RealDebridClient {
         }
 
         if !response.status().is_success() {
-            return Err(ApiError::RealDebrid(format!(
-                "HTTP {}",
-                response.status()
-            )));
+            return Err(ApiError::RealDebrid(format!("HTTP {}", response.status())));
         }
 
         let user: RealDebridUser = response.json().await?;

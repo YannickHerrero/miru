@@ -42,8 +42,8 @@ pub fn save_config(config: &Config) -> Result<(), ConfigError> {
         fs::create_dir_all(parent)?;
     }
 
-    let content = toml::to_string_pretty(config)
-        .map_err(|e| ConfigError::SaveFailed(e.to_string()))?;
+    let content =
+        toml::to_string_pretty(config).map_err(|e| ConfigError::SaveFailed(e.to_string()))?;
 
     fs::write(&path, content)?;
 

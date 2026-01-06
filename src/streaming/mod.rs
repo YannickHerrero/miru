@@ -111,7 +111,10 @@ impl TorrentStreamer {
     ///
     /// Returns a StreamHandle with the HTTP URL for playback
     pub async fn stream_magnet(&self, magnet: &str) -> Result<StreamHandle, StreamingError> {
-        tracing::info!("Starting torrent stream for magnet: {}...", &magnet[..magnet.len().min(60)]);
+        tracing::info!(
+            "Starting torrent stream for magnet: {}...",
+            &magnet[..magnet.len().min(60)]
+        );
 
         // Clean up any existing torrent first
         self.cleanup().await;
@@ -199,22 +202,22 @@ impl TorrentStreamer {
     /// Find the best video file in the torrent (largest video file)
     async fn find_video_file(&self, torrent_id: usize) -> Result<(usize, String), StreamingError> {
         // Use the API to get torrent details with file list
-        let details = self.api.api_torrent_details(torrent_id.into())
-            .map_err(|e| StreamingError::NoVideoFile(format!("Failed to get torrent details: {}", e)))?;
+        let details = self
+            .api
+            .api_torrent_details(torrent_id.into())
+            .map_err(|e| {
+                StreamingError::NoVideoFile(format!("Failed to get torrent details: {}", e))
+            })?;
 
-        let files = details.files.ok_or_else(|| {
-            StreamingError::NoVideoFile("No files in torrent".to_string())
-        })?;
+        let files = details
+            .files
+            .ok_or_else(|| StreamingError::NoVideoFile("No files in torrent".to_string()))?;
 
         let mut best_match: Option<(usize, String, u64)> = None;
 
         for (idx, file) in files.iter().enumerate() {
             let filename = file.name.clone();
-            let extension = filename
-                .rsplit('.')
-                .next()
-                .unwrap_or("")
-                .to_lowercase();
+            let extension = filename.rsplit('.').next().unwrap_or("").to_lowercase();
 
             if VIDEO_EXTENSIONS.contains(&extension.as_str()) {
                 let size = file.length;
@@ -224,9 +227,9 @@ impl TorrentStreamer {
             }
         }
 
-        best_match
-            .map(|(idx, name, _)| (idx, name))
-            .ok_or_else(|| StreamingError::NoVideoFile("No video files found in torrent".to_string()))
+        best_match.map(|(idx, name, _)| (idx, name)).ok_or_else(|| {
+            StreamingError::NoVideoFile("No video files found in torrent".to_string())
+        })
     }
 
     /// Get current streaming progress
@@ -234,7 +237,10 @@ impl TorrentStreamer {
         let active = self.active_torrent.read().await;
         let active = active.as_ref()?;
 
-        let details = self.api.api_torrent_details(active.torrent_id.into()).ok()?;
+        let details = self
+            .api
+            .api_torrent_details(active.torrent_id.into())
+            .ok()?;
         let stats = details.stats?;
 
         let total_bytes = stats.total_bytes;
@@ -259,8 +265,7 @@ impl TorrentStreamer {
             download_speed,
             peers,
             // Consider ready to play when we have at least 2% or 5MB
-            ready_to_play: progress_percent >= 2.0
-                || downloaded_bytes >= 5 * 1024 * 1024,
+            ready_to_play: progress_percent >= 2.0 || downloaded_bytes >= 5 * 1024 * 1024,
         })
     }
 
@@ -269,10 +274,7 @@ impl TorrentStreamer {
         let mut active = self.active_torrent.write().await;
         if let Some(torrent) = active.take() {
             // Delete the torrent and its files
-            let _ = self
-                .session
-                .delete(torrent.torrent_id.into(), true)
-                .await;
+            let _ = self.session.delete(torrent.torrent_id.into(), true).await;
         }
     }
 

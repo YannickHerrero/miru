@@ -108,12 +108,12 @@ impl SourcesScreen {
         } else {
             title_spans.push(Span::styled(&self.title, theme.title()));
         }
-        
+
         // Show uncached indicator in title
         if self.show_uncached {
             title_spans.push(Span::styled(" [showing uncached]", theme.warning()));
         }
-        
+
         let title = Line::from(title_spans);
         let title_widget = Paragraph::new(title);
         frame.render_widget(title_widget, chunks[0]);
@@ -150,13 +150,14 @@ impl SourcesScreen {
     /// Render the empty state message
     fn render_empty_state(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let mut lines = vec![];
-        
-        lines.push(Line::from(vec![
-            Span::styled("No sources found", theme.warning()),
-        ]));
-        
+
+        lines.push(Line::from(vec![Span::styled(
+            "No sources found",
+            theme.warning(),
+        )]));
+
         lines.push(Line::from(""));
-        
+
         if !self.show_uncached {
             lines.push(Line::from(vec![
                 Span::styled("Press ", theme.muted()),
@@ -164,11 +165,12 @@ impl SourcesScreen {
                 Span::styled(" to show uncached sources", theme.muted()),
             ]));
         } else {
-            lines.push(Line::from(vec![
-                Span::styled("No torrents available for this title.", theme.muted()),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "No torrents available for this title.",
+                theme.muted(),
+            )]));
         }
-        
+
         let paragraph = Paragraph::new(lines);
         frame.render_widget(paragraph, area);
     }
@@ -180,7 +182,7 @@ impl SourcesScreen {
         } else {
             "show uncached"
         };
-        
+
         let help = Line::from(vec![
             Span::styled("↑/↓", theme.highlight()),
             Span::styled(" navigate • ", theme.muted()),
@@ -197,45 +199,55 @@ impl SourcesScreen {
 
     /// Render the sources list
     fn render_list(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        self.list.render(frame, area, " Select Source ", theme, |source, is_selected| {
-            let style = if is_selected { theme.selected() } else { theme.normal() };
-            let muted = theme.muted();
-
-            let mut spans = vec![];
-            
-            // Show uncached indicator
-            if !source.is_cached {
-                spans.push(Span::styled("[uncached] ", theme.error()));
-            }
-
-            if let Some(quality) = &source.quality {
-                spans.push(Span::styled(format!("[{}]", quality), style));
-            }
-
-            // Show HDR info in list if available
-            if let Some(hdr) = &source.hdr {
-                spans.push(Span::styled(format!(" {}", hdr), theme.warning()));
-            }
-
-            if let Some(size) = &source.size {
-                spans.push(Span::styled(format!(" {}", size), muted));
-            }
-
-            if let Some(seeders) = source.seeders {
-                spans.push(Span::styled(format!(" 👤{}", seeders), muted));
-            }
-
-            // Show languages if available
-            if !source.languages.is_empty() {
-                let lang_display = if source.languages.len() <= 2 {
-                    source.languages.join(", ")
+        self.list.render(
+            frame,
+            area,
+            " Select Source ",
+            theme,
+            |source, is_selected| {
+                let style = if is_selected {
+                    theme.selected()
                 } else {
-                    format!("{} langs", source.languages.len())
+                    theme.normal()
                 };
-                spans.push(Span::styled(format!(" ({})", lang_display), muted));
-            }
+                let muted = theme.muted();
 
-            spans
-        });
+                let mut spans = vec![];
+
+                // Show uncached indicator
+                if !source.is_cached {
+                    spans.push(Span::styled("[uncached] ", theme.error()));
+                }
+
+                if let Some(quality) = &source.quality {
+                    spans.push(Span::styled(format!("[{}]", quality), style));
+                }
+
+                // Show HDR info in list if available
+                if let Some(hdr) = &source.hdr {
+                    spans.push(Span::styled(format!(" {}", hdr), theme.warning()));
+                }
+
+                if let Some(size) = &source.size {
+                    spans.push(Span::styled(format!(" {}", size), muted));
+                }
+
+                if let Some(seeders) = source.seeders {
+                    spans.push(Span::styled(format!(" 👤{}", seeders), muted));
+                }
+
+                // Show languages if available
+                if !source.languages.is_empty() {
+                    let lang_display = if source.languages.len() <= 2 {
+                        source.languages.join(", ")
+                    } else {
+                        format!("{} langs", source.languages.len())
+                    };
+                    spans.push(Span::styled(format!(" ({})", lang_display), muted));
+                }
+
+                spans
+            },
+        );
     }
 }

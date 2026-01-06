@@ -334,7 +334,8 @@ impl App {
                 episode,
                 show_uncached,
             } => {
-                self.handle_fetch_sources(media, season, episode, show_uncached).await;
+                self.handle_fetch_sources(media, season, episode, show_uncached)
+                    .await;
             }
 
             PendingOperation::RefetchSources {
@@ -439,7 +440,13 @@ impl App {
     }
 
     /// Fetch sources from Torrentio
-    async fn handle_fetch_sources(&mut self, media: Media, season: u32, episode: u32, show_uncached: bool) {
+    async fn handle_fetch_sources(
+        &mut self,
+        media: Media,
+        season: u32,
+        episode: u32,
+        show_uncached: bool,
+    ) {
         // Get IMDB ID based on source
         let imdb_id = match self.get_imdb_id(&media).await {
             Ok(id) => id,
@@ -459,9 +466,15 @@ impl App {
 
         // Fetch streams based on media type
         let streams_result = match media.media_type {
-            MediaType::Movie => self.torrentio.get_movie_streams(&imdb_id, show_uncached).await,
+            MediaType::Movie => {
+                self.torrentio
+                    .get_movie_streams(&imdb_id, show_uncached)
+                    .await
+            }
             MediaType::TvShow => {
-                self.torrentio.get_streams(&imdb_id, season, episode, show_uncached).await
+                self.torrentio
+                    .get_streams(&imdb_id, season, episode, show_uncached)
+                    .await
             }
         };
 
@@ -474,7 +487,13 @@ impl App {
                 } else {
                     episode
                 };
-                self.screen = Screen::Sources(SourcesScreen::new(title, ep_num, streams, context, show_uncached));
+                self.screen = Screen::Sources(SourcesScreen::new(
+                    title,
+                    ep_num,
+                    streams,
+                    context,
+                    show_uncached,
+                ));
             }
             Err(e) => {
                 self.screen = Screen::Error(ErrorScreen::new(e.to_string(), true));
@@ -486,9 +505,20 @@ impl App {
     async fn handle_refetch_sources(&mut self, context: SourcesContext, show_uncached: bool) {
         // Fetch streams based on media type
         let streams_result = match context.media.media_type {
-            MediaType::Movie => self.torrentio.get_movie_streams(&context.imdb_id, show_uncached).await,
+            MediaType::Movie => {
+                self.torrentio
+                    .get_movie_streams(&context.imdb_id, show_uncached)
+                    .await
+            }
             MediaType::TvShow => {
-                self.torrentio.get_streams(&context.imdb_id, context.season, context.episode, show_uncached).await
+                self.torrentio
+                    .get_streams(
+                        &context.imdb_id,
+                        context.season,
+                        context.episode,
+                        show_uncached,
+                    )
+                    .await
             }
         };
 
@@ -500,7 +530,13 @@ impl App {
                 } else {
                     context.episode
                 };
-                self.screen = Screen::Sources(SourcesScreen::new(title, ep_num, streams, context, show_uncached));
+                self.screen = Screen::Sources(SourcesScreen::new(
+                    title,
+                    ep_num,
+                    streams,
+                    context,
+                    show_uncached,
+                ));
             }
             Err(e) => {
                 self.screen = Screen::Error(ErrorScreen::new(e.to_string(), true));
@@ -509,7 +545,10 @@ impl App {
     }
 
     /// Get IMDB ID for a media item
-    async fn get_imdb_id(&self, media: &Media) -> std::result::Result<String, crate::error::ApiError> {
+    async fn get_imdb_id(
+        &self,
+        media: &Media,
+    ) -> std::result::Result<String, crate::error::ApiError> {
         // If we already have IMDB ID, use it
         if let Some(imdb_id) = &media.imdb_id {
             return Ok(imdb_id.clone());

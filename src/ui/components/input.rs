@@ -100,7 +100,11 @@ impl Input {
         // Build the input line with cursor
         let (before, after) = self.value.split_at(self.cursor);
         let cursor_char = after.chars().next().unwrap_or(' ');
-        let after = if after.is_empty() { "" } else { &after[cursor_char.len_utf8()..] };
+        let after = if after.is_empty() {
+            ""
+        } else {
+            &after[cursor_char.len_utf8()..]
+        };
 
         let line = if self.focused {
             Line::from(vec![

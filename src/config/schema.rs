@@ -28,8 +28,12 @@ impl Config {
     /// Create a new config with just the API keys, using defaults for everything else
     pub fn new(rd_api_key: String, tmdb_api_key: String) -> Self {
         Self {
-            real_debrid: RealDebridConfig { api_key: rd_api_key },
-            tmdb: TmdbConfig { api_key: tmdb_api_key },
+            real_debrid: RealDebridConfig {
+                api_key: rd_api_key,
+            },
+            tmdb: TmdbConfig {
+                api_key: tmdb_api_key,
+            },
             torrentio: TorrentioConfig::default(),
             player: PlayerConfig::default(),
             ui: UiConfig::default(),

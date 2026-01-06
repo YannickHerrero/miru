@@ -87,9 +87,10 @@ impl TmdbClient {
             return Err(ApiError::Tmdb(format!("HTTP {}", response.status())));
         }
 
-        let data: MovieSearchResponse = response.json().await.map_err(|e| {
-            ApiError::Tmdb(format!("Failed to parse response: {}", e))
-        })?;
+        let data: MovieSearchResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Tmdb(format!("Failed to parse response: {}", e)))?;
 
         Ok(data.results.into_iter().map(Media::from).collect())
     }
@@ -113,9 +114,10 @@ impl TmdbClient {
             return Err(ApiError::Tmdb(format!("HTTP {}", response.status())));
         }
 
-        let data: TvSearchResponse = response.json().await.map_err(|e| {
-            ApiError::Tmdb(format!("Failed to parse response: {}", e))
-        })?;
+        let data: TvSearchResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Tmdb(format!("Failed to parse response: {}", e)))?;
 
         Ok(data.results.into_iter().map(Media::from).collect())
     }
@@ -127,10 +129,7 @@ impl TmdbClient {
         }
 
         // Search movies and TV in parallel
-        let (movies, tv_shows) = tokio::join!(
-            self.search_movies(query),
-            self.search_tv(query)
-        );
+        let (movies, tv_shows) = tokio::join!(self.search_movies(query), self.search_tv(query));
 
         let mut results = movies?;
         results.extend(tv_shows?);
@@ -153,9 +152,10 @@ impl TmdbClient {
             return Err(ApiError::Tmdb(format!("HTTP {}", response.status())));
         }
 
-        let data: ExternalIdsResponse = response.json().await.map_err(|e| {
-            ApiError::Tmdb(format!("Failed to parse response: {}", e))
-        })?;
+        let data: ExternalIdsResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Tmdb(format!("Failed to parse response: {}", e)))?;
 
         data.imdb_id.ok_or(ApiError::MappingNotFound)
     }
@@ -173,19 +173,17 @@ impl TmdbClient {
             return Err(ApiError::Tmdb(format!("HTTP {}", response.status())));
         }
 
-        let data: ExternalIdsResponse = response.json().await.map_err(|e| {
-            ApiError::Tmdb(format!("Failed to parse response: {}", e))
-        })?;
+        let data: ExternalIdsResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Tmdb(format!("Failed to parse response: {}", e)))?;
 
         data.imdb_id.ok_or(ApiError::MappingNotFound)
     }
 
     /// Get TV show details including seasons
     pub async fn get_tv_details(&self, tv_id: i32) -> Result<Vec<Season>, ApiError> {
-        let url = format!(
-            "{}/tv/{}?api_key={}",
-            TMDB_API_URL, tv_id, self.api_key
-        );
+        let url = format!("{}/tv/{}?api_key={}", TMDB_API_URL, tv_id, self.api_key);
 
         let response = self.client.get(&url).send().await?;
 
@@ -193,9 +191,10 @@ impl TmdbClient {
             return Err(ApiError::Tmdb(format!("HTTP {}", response.status())));
         }
 
-        let data: TvDetailsResponse = response.json().await.map_err(|e| {
-            ApiError::Tmdb(format!("Failed to parse response: {}", e))
-        })?;
+        let data: TvDetailsResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Tmdb(format!("Failed to parse response: {}", e)))?;
 
         Ok(data
             .seasons
@@ -290,7 +289,9 @@ impl From<MovieResult> for Media {
             score: movie.vote_average,
             episodes: None,
             seasons: None,
-            cover_image: movie.poster_path.map(|p| format!("{}{}", TMDB_IMAGE_BASE, p)),
+            cover_image: movie
+                .poster_path
+                .map(|p| format!("{}{}", TMDB_IMAGE_BASE, p)),
             episode_titles: vec![],
             description: movie.overview,
             status: Some("Released".to_string()),

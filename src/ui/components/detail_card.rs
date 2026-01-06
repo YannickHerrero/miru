@@ -83,7 +83,10 @@ impl DetailCard {
                 if !info_spans.is_empty() {
                     info_spans.push(Span::styled("  ", theme.normal()));
                 }
-                info_spans.push(Span::styled(format!("{} {:.1}", STAR, score), theme.warning()));
+                info_spans.push(Span::styled(
+                    format!("{} {:.1}", STAR, score),
+                    theme.warning(),
+                ));
             }
         }
 

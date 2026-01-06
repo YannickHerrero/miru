@@ -68,8 +68,14 @@ impl<T> SelectableList<T> {
     }
 
     /// Render the list with a custom item renderer
-    pub fn render<F>(&mut self, frame: &mut Frame, area: Rect, title: &str, theme: &Theme, render_item: F)
-    where
+    pub fn render<F>(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        title: &str,
+        theme: &Theme,
+        render_item: F,
+    ) where
         F: Fn(&T, bool) -> Vec<Span<'static>>,
     {
         let items: Vec<ListItem> = self

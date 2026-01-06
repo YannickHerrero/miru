@@ -128,39 +128,44 @@ impl ResultsScreen {
 
     /// Render the results list
     fn render_list(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        self.list.render(frame, area, " Results ", theme, |media, is_selected| {
-            let style = if is_selected { theme.selected() } else { theme.normal() };
-            let muted = theme.muted();
+        self.list
+            .render(frame, area, " Results ", theme, |media, is_selected| {
+                let style = if is_selected {
+                    theme.selected()
+                } else {
+                    theme.normal()
+                };
+                let muted = theme.muted();
 
-            // Media type indicator
-            let type_style = match media.media_type {
-                MediaType::Movie => theme.accent(),
-                MediaType::TvShow => theme.info(),
-            };
+                // Media type indicator
+                let type_style = match media.media_type {
+                    MediaType::Movie => theme.accent(),
+                    MediaType::TvShow => theme.info(),
+                };
 
-            let mut spans = vec![
-                Span::styled(format!("[{}] ", media.media_type.label()), type_style),
-                Span::styled(media.display_title().to_string(), style),
-            ];
+                let mut spans = vec![
+                    Span::styled(format!("[{}] ", media.media_type.label()), type_style),
+                    Span::styled(media.display_title().to_string(), style),
+                ];
 
-            if let Some(score) = media.score {
-                if score > 0.0 {
-                    spans.push(Span::styled(format!("  {} {:.1}", STAR, score), muted));
+                if let Some(score) = media.score {
+                    if score > 0.0 {
+                        spans.push(Span::styled(format!("  {} {:.1}", STAR, score), muted));
+                    }
                 }
-            }
 
-            if let Some(year) = media.year {
-                spans.push(Span::styled(format!("  {}", year), muted));
-            }
-
-            // Show season count for TV shows
-            if media.media_type == MediaType::TvShow {
-                if let Some(seasons) = media.seasons {
-                    spans.push(Span::styled(format!("  ({} seasons)", seasons), muted));
+                if let Some(year) = media.year {
+                    spans.push(Span::styled(format!("  {}", year), muted));
                 }
-            }
 
-            spans
-        });
+                // Show season count for TV shows
+                if media.media_type == MediaType::TvShow {
+                    if let Some(seasons) = media.seasons {
+                        spans.push(Span::styled(format!("  ({} seasons)", seasons), muted));
+                    }
+                }
+
+                spans
+            });
     }
 }

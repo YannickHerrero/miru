@@ -16,7 +16,7 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![];
     }
-    
+
     let mut lines = Vec::new();
     let mut current_line = String::new();
     let mut current_width = 0;
@@ -28,7 +28,12 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
             // Start of a new line
             if word_len > width {
                 // Word is longer than line width, truncate it
-                lines.push(format!("{}...", word.chars().take(width.saturating_sub(3)).collect::<String>()));
+                lines.push(format!(
+                    "{}...",
+                    word.chars()
+                        .take(width.saturating_sub(3))
+                        .collect::<String>()
+                ));
             } else {
                 current_line = word.to_string();
                 current_width = word_len;
@@ -42,7 +47,12 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
             // Word doesn't fit, start new line
             lines.push(current_line);
             if word_len > width {
-                lines.push(format!("{}...", word.chars().take(width.saturating_sub(3)).collect::<String>()));
+                lines.push(format!(
+                    "{}...",
+                    word.chars()
+                        .take(width.saturating_sub(3))
+                        .collect::<String>()
+                ));
                 current_line = String::new();
                 current_width = 0;
             } else {
@@ -127,13 +137,16 @@ impl StreamDetailCard {
         // Languages row (with wrapping)
         if !stream.languages.is_empty() {
             lines.push(Line::from(Span::styled("Languages:", theme.muted())));
-            
+
             let languages_str = stream.languages.join(", ");
             let max_width = inner.width.saturating_sub(2) as usize; // Leave some padding
-            
+
             // Wrap the languages text
             for line in wrap_text(&languages_str, max_width) {
-                lines.push(Line::from(Span::styled(format!("  {}", line), theme.normal())));
+                lines.push(Line::from(Span::styled(
+                    format!("  {}", line),
+                    theme.normal(),
+                )));
             }
         }
 

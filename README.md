@@ -121,6 +121,46 @@ cleanup_after_playback = true # Delete downloaded files after playback
 - [TMDB API key](https://www.themoviedb.org/settings/api)
 - [Real-Debrid](https://real-debrid.com/) subscription (optional, for instant cached playback)
 
+## Running on Windows (WSL)
+
+Miru runs in WSL but can use Windows-native mpv for video playback. This avoids the complexity of setting up X11/WSLg for GUI applications.
+
+### Setup
+
+1. **Install mpv on Windows** (not in WSL):
+   ```powershell
+   # Using winget
+   winget install mpv
+
+   # Or using Scoop
+   scoop install mpv
+
+   # Or download from https://mpv.io/installation/
+   ```
+
+2. **Configure Miru to use Windows mpv**:
+   
+   ```bash
+   miru config --set player_command=/mnt/c/Users/<YourUsername>/scoop/shims/mpv.exe
+   ```
+   
+   Or edit your config file directly (`~/.config/miru/config.toml`):
+   ```toml
+   [player]
+   command = "/mnt/c/Users/<YourUsername>/scoop/shims/mpv.exe"
+   args = ["--fullscreen"]
+   ```
+   
+   Common mpv locations on Windows:
+   - Scoop: `/mnt/c/Users/<User>/scoop/shims/mpv.exe`
+   - Winget/System: `/mnt/c/Program Files/mpv/mpv.exe`
+   - Chocolatey: `/mnt/c/ProgramData/chocolatey/bin/mpv.exe`
+
+3. **Verify it works**:
+   ```bash
+   miru
+   ```
+
 ## License
 
 MIT
