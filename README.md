@@ -28,17 +28,28 @@ cargo install --path .
      - Use the **API Key (v3 auth)**, not the Read Access Token
    - **Real-Debrid** (optional): https://real-debrid.com/apitoken
      - Provides instant cached playback for popular content
-     - Without it, miru uses direct P2P streaming (may require buffering)
+     - Without it, miru uses direct P2P streaming (may require buffering while downloading)
 
 2. Run the setup wizard:
    ```bash
    miru init
    ```
+   During setup, you can choose:
+   - **Direct P2P Streaming** (free): Download torrents directly to your device
+   - **Real-Debrid** (faster): Access cached torrents on Real-Debrid servers
 
 3. Start watching:
    ```bash
    miru
    ```
+
+### Add Real-Debrid Later
+
+If you skipped Real-Debrid during setup, you can add it anytime:
+
+```bash
+miru config --set rd_api_key YOUR_API_KEY
+```
 
 ## Usage
 
@@ -118,8 +129,10 @@ cleanup_after_playback = true # Delete downloaded files after playback
 ## Requirements
 
 - [MPV](https://mpv.io/) media player (or another compatible player)
-- [TMDB API key](https://www.themoviedb.org/settings/api)
-- [Real-Debrid](https://real-debrid.com/) subscription (optional, for instant cached playback)
+- [TMDB API key](https://www.themoviedb.org/settings/api) - required for searching content
+- [Real-Debrid](https://real-debrid.com/) API key (optional)
+  - **Recommended**: Provides instant playback from cached torrents
+  - **Not needed**: miru works fine with direct P2P streaming
 
 ## Running on Windows (WSL)
 

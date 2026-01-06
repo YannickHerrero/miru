@@ -52,9 +52,18 @@ impl Config {
     }
 }
 
-/// Real-Debrid configuration
+/// Real-Debrid configuration (optional)
+///
+/// Real-Debrid is optional. If no API key is configured, miru will use direct P2P streaming.
+///
+/// - **With Real-Debrid**: Access cached torrents on Real-Debrid servers for faster speeds
+/// - **Without Real-Debrid**: Use direct P2P streaming to download torrents to your device
+///
+/// To add a Real-Debrid account later, run: `miru config --set rd_api_key=YOUR_KEY`
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RealDebridConfig {
+    /// Real-Debrid API key (optional). Leave empty to use direct P2P streaming.
+    /// Get yours at: https://real-debrid.com/apitoken
     #[serde(default)]
     pub api_key: String,
 }

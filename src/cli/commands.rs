@@ -33,38 +33,43 @@ pub async fn init() -> Result<()> {
         }
     }
 
-    // Prompt for Real-Debrid API key
-    println!("To use miru, you need a Real-Debrid API key.");
-    println!("Get yours at: https://real-debrid.com/apitoken\n");
+    // Prompt for Real-Debrid API key (optional)
+    println!("miru supports two streaming modes:\n");
+    println!("  1. Direct P2P Streaming (free, no account needed)");
+    println!("     - Download torrents directly to your device");
+    println!("     - No Real-Debrid account required\n");
+    println!("  2. Real-Debrid Cached (faster, requires account)");
+    println!("     - Access cached torrents on Real-Debrid servers");
+    println!("     - Faster speeds, less bandwidth usage");
+    println!("     - Get a free account at: https://real-debrid.com\n");
 
-    print!("Enter your Real-Debrid API key: ");
+    print!("Enter your Real-Debrid API key (or press Enter to use direct P2P): ");
     io::stdout().flush()?;
 
     let mut rd_api_key = String::new();
     io::stdin().read_line(&mut rd_api_key)?;
     let rd_api_key = rd_api_key.trim().to_string();
 
-    if rd_api_key.is_empty() {
-        println!("API key cannot be empty. Setup cancelled.");
-        return Ok(());
-    }
+    if !rd_api_key.is_empty() {
+        // Validate the Real-Debrid API key only if one was provided
+        print!("Validating Real-Debrid API key... ");
+        io::stdout().flush()?;
 
-    // Validate the Real-Debrid API key
-    print!("Validating Real-Debrid API key... ");
-    io::stdout().flush()?;
-
-    let client = RealDebridClient::new(rd_api_key.clone());
-    match client.validate_key().await {
-        Ok(user) => {
-            println!("OK!");
-            println!("Logged in as: {}", user.username);
+        let client = RealDebridClient::new(rd_api_key.clone());
+        match client.validate_key().await {
+            Ok(user) => {
+                println!("OK!");
+                println!("Logged in as: {}", user.username);
+            }
+            Err(e) => {
+                println!("Failed!");
+                println!("Error: {}", e);
+                println!("\nPlease check your API key and try again.");
+                return Ok(());
+            }
         }
-        Err(e) => {
-            println!("Failed!");
-            println!("Error: {}", e);
-            println!("\nPlease check your API key and try again.");
-            return Ok(());
-        }
+    } else {
+        println!("Using direct P2P streaming mode.");
     }
 
     // Prompt for TMDB API key
