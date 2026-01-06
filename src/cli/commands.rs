@@ -1,26 +1,15 @@
 use std::io::{self, Write};
 
-use crate::api::{RealDebridClient, TmdbClient};
 use crate::config::{config_path, load_config, save_config, Config};
 use crate::error::Result;
-use crate::ui::App;
-
-const ASCII_ART: &str = r#"
-          _              
-  _ __ ___ (_)_ __ _   _  
- | '_ ` _ \| | '__| | | | 
- | | | | | | | |  | |_| | 
- |_| |_| |_|_|_|   \__,_| 
-                          
-"#;
+use crate::ui::{App, InitWizard};
 
 /// Run the first-time setup wizard
 pub async fn init() -> Result<()> {
-    println!("{}", ASCII_ART);
-    println!("Welcome to miru - your terminal streaming companion!\n");
-
     // Check if config already exists
-    if config_path().exists() {
+    let config_exists = config_path().exists();
+
+    if config_exists {
         print!("Configuration already exists. Overwrite? [y/N]: ");
         io::stdout().flush()?;
 
@@ -31,144 +20,19 @@ pub async fn init() -> Result<()> {
             println!("Setup cancelled.");
             return Ok(());
         }
-        println!();
     }
 
-    // =========================================
-    // Step 1: Prerequisites intro screen
-    // =========================================
-    println!("Before you start, make sure you have the following:\n");
+    // Run the TUI wizard
+    let mut wizard = InitWizard::new(config_exists);
+    let completed = wizard.run().await?;
 
-    // Check if MPV is installed
-    let mpv_installed = which::which("mpv").is_ok();
-    if mpv_installed {
-        println!("  [x] MPV media player (installed)");
+    if completed {
+        println!("\nRun 'miru' to start watching.");
     } else {
-        println!("  [ ] MPV media player (NOT FOUND)");
-        println!("      Install from: https://mpv.io/installation/");
+        println!("\nSetup cancelled.");
     }
 
-    println!();
-    println!("  [ ] TMDB API key (required, free)");
-    println!("      Get yours at: https://www.themoviedb.org/settings/api");
-    println!("      Use the \"API Key (v3 auth)\", not the Read Access Token.");
-    println!();
-    println!("  [ ] Real-Debrid API key (optional, paid subscription)");
-    println!("      Sign up at: http://real-debrid.com/?id=16544328");
-    println!("      Provides faster cached streaming. Without it, miru uses direct P2P.");
-    println!();
-
-    if !mpv_installed {
-        println!("WARNING: MPV is not installed. You won't be able to play videos.");
-        println!("         Please install MPV before continuing.\n");
-    }
-
-    print!("Press Enter to continue...");
-    io::stdout().flush()?;
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    println!();
-
-    // =========================================
-    // Step 2: Real-Debrid API key (optional)
-    // =========================================
-    println!("Step 1/2: Real-Debrid (optional)\n");
-    println!("Real-Debrid provides faster cached streaming for popular content.");
-    println!("Without it, miru uses direct P2P streaming (free, but may buffer).");
-    println!();
-    println!("Get your API key at: https://real-debrid.com/apitoken\n");
-
-    print!("Enter your Real-Debrid API key (or press Enter to skip): ");
-    io::stdout().flush()?;
-
-    let mut rd_api_key = String::new();
-    io::stdin().read_line(&mut rd_api_key)?;
-    let rd_api_key = rd_api_key.trim().to_string();
-
-    if !rd_api_key.is_empty() {
-        // Validate the Real-Debrid API key only if one was provided
-        print!("Validating Real-Debrid API key... ");
-        io::stdout().flush()?;
-
-        let client = RealDebridClient::new(rd_api_key.clone());
-        match client.validate_key().await {
-            Ok(user) => {
-                println!("OK!");
-                println!("Logged in as: {}", user.username);
-            }
-            Err(e) => {
-                println!("Failed!");
-                println!("Error: {}", e);
-                println!("\nPlease check your API key and try again.");
-                return Ok(());
-            }
-        }
-    } else {
-        println!("Skipped. Using direct P2P streaming.");
-    }
-    println!();
-
-    // =========================================
-    // Step 3: TMDB API key (required)
-    // =========================================
-    println!("Step 2/2: TMDB (required)\n");
-    println!("TMDB is required to search for movies, TV shows, and anime.");
-    println!();
-    println!("Get your API key at: https://www.themoviedb.org/settings/api");
-    println!("Use the \"API Key (v3 auth)\", not the Read Access Token.\n");
-
-    loop {
-        print!("Enter your TMDB API key: ");
-        io::stdout().flush()?;
-
-        let mut tmdb_api_key = String::new();
-        io::stdin().read_line(&mut tmdb_api_key)?;
-        let tmdb_api_key = tmdb_api_key.trim().to_string();
-
-        if tmdb_api_key.is_empty() {
-            println!("API key cannot be empty. Please try again.\n");
-            continue;
-        }
-
-        // Validate the TMDB API key
-        print!("Validating TMDB API key... ");
-        io::stdout().flush()?;
-
-        let client = TmdbClient::new(tmdb_api_key.clone());
-        match client.search_all("test").await {
-            Ok(_) => {
-                println!("OK!");
-
-                // Save config
-                let config = Config::new(rd_api_key, tmdb_api_key);
-                save_config(&config)?;
-
-                println!("\n=========================================");
-                println!("Setup complete!");
-                println!("=========================================\n");
-                println!("Configuration saved to: {}", config_path().display());
-
-                // Warn if MPV is not installed
-                if !mpv_installed {
-                    println!();
-                    println!("WARNING: MPV was not found on your system.");
-                    println!("You can configure the player path in one of two ways:");
-                    println!("  1. Edit ~/.config/miru/config.toml and set player.command");
-                    println!("  2. Run: miru config --set player_command=<path>");
-                }
-
-                println!();
-                println!("Run 'miru' to start watching.");
-
-                return Ok(());
-            }
-            Err(e) => {
-                println!("Failed!");
-                println!("Error: {}", e);
-                println!("Please check your API key and try again.\n");
-            }
-        }
-    }
+    Ok(())
 }
 
 /// Handle the config command
