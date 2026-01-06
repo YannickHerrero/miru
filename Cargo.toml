@@ -54,6 +54,9 @@ librqbit = "8.1"
 # Temp directories
 tempfile = "3"
 
+# Vendored OpenSSL (required by librqbit, avoids system libssl-dev dependency)
+openssl = { version = "0.10", features = ["vendored"] }
+
 [profile.release]
 lto = true
 strip = true
