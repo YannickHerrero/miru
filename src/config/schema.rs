@@ -68,9 +68,16 @@ pub struct RealDebridConfig {
     pub api_key: String,
 }
 
-/// TMDB configuration
+/// TMDB configuration (required)
+///
+/// TMDB (The Movie Database) is required for all search functionality.
+/// Without a valid TMDB API key, search will return no results.
+///
+/// Get your API key at: https://www.themoviedb.org/settings/api
+/// Use the "API Key (v3 auth)", not the Read Access Token.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbConfig {
+    /// TMDB API key (required). Must be obtained from https://www.themoviedb.org/settings/api
     pub api_key: String,
 }
 

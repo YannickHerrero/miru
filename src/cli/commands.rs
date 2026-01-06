@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::api::RealDebridClient;
+use crate::api::{RealDebridClient, TmdbClient};
 use crate::config::{config_path, load_config, save_config, Config};
 use crate::error::Result;
 use crate::ui::App;
@@ -72,31 +72,50 @@ pub async fn init() -> Result<()> {
         println!("Using direct P2P streaming mode.");
     }
 
-    // Prompt for TMDB API key
-    println!("\nTo search for movies and TV shows, you need a TMDB API key.");
-    println!("Get yours at: https://www.themoviedb.org/settings/api\n");
+    // Prompt for TMDB API key (required)
+    println!("\nTo search for movies, TV shows, and anime, you need a TMDB API key.");
+    println!("Get yours at: https://www.themoviedb.org/settings/api");
+    println!("Use the API Key (v3 auth), not the Read Access Token.\n");
 
-    print!("Enter your TMDB API key (or press Enter to skip): ");
-    io::stdout().flush()?;
+    loop {
+        print!("Enter your TMDB API key: ");
+        io::stdout().flush()?;
 
-    let mut tmdb_api_key = String::new();
-    io::stdin().read_line(&mut tmdb_api_key)?;
-    let tmdb_api_key = tmdb_api_key.trim().to_string();
+        let mut tmdb_api_key = String::new();
+        io::stdin().read_line(&mut tmdb_api_key)?;
+        let tmdb_api_key = tmdb_api_key.trim().to_string();
 
-    if tmdb_api_key.is_empty() {
-        println!("Skipping TMDB setup. Only anime search will be available.");
-    } else {
-        println!("TMDB API key saved. Movies and TV shows search enabled!");
+        if tmdb_api_key.is_empty() {
+            println!("API key cannot be empty. Please try again.");
+            continue;
+        }
+
+        // Validate the TMDB API key
+        print!("Validating TMDB API key... ");
+        io::stdout().flush()?;
+
+        let client = TmdbClient::new(tmdb_api_key.clone());
+        match client.search_all("test").await {
+            Ok(_) => {
+                println!("OK!");
+                println!("TMDB configured successfully!");
+
+                // Save config
+                let config = Config::new(rd_api_key, tmdb_api_key);
+                save_config(&config)?;
+
+                println!("\nConfiguration saved to: {}", config_path().display());
+                println!("\nYou're all set! Run 'miru' to start watching.");
+
+                return Ok(());
+            }
+            Err(e) => {
+                println!("Failed!");
+                println!("Error: {}", e);
+                println!("Please check your API key and try again.\n");
+            }
+        }
     }
-
-    // Save config
-    let config = Config::new(rd_api_key, tmdb_api_key);
-    save_config(&config)?;
-
-    println!("\nConfiguration saved to: {}", config_path().display());
-    println!("\nYou're all set! Run 'miru' to start watching.");
-
-    Ok(())
 }
 
 /// Handle the config command
