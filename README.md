@@ -18,9 +18,110 @@ https://github.com/user-attachments/assets/0fc5c941-bcf2-4b0a-bdbf-791b87337e22
 
 ## Installation
 
+### Requirements
+
+- **Video player**: [mpv](https://mpv.io/) (recommended) or VLC
+- **TMDB API key** (required): Get one at https://www.themoviedb.org/settings/api
+- **Real-Debrid API key** (optional): For faster cached playback — https://real-debrid.com/apitoken
+
+### Build from Source
+
+Miru requires the [Rust toolchain](https://rustup.rs/) and a C compiler.
+
+#### Linux (Debian/Ubuntu)
+
 ```bash
-cargo install --path .
+# Install dependencies
+sudo apt update
+sudo apt install build-essential pkg-config mpv
+
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Install miru
+cargo install --git https://github.com/YannickHerrero/miru
 ```
+
+#### Linux (Fedora)
+
+```bash
+# Install dependencies
+sudo dnf install gcc pkg-config mpv
+
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Install miru
+cargo install --git https://github.com/YannickHerrero/miru
+```
+
+#### Linux (Arch)
+
+```bash
+# Install dependencies
+sudo pacman -S base-devel mpv
+
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Install miru
+cargo install --git https://github.com/YannickHerrero/miru
+```
+
+#### macOS
+
+```bash
+# Install Xcode Command Line Tools (includes C compiler)
+xcode-select --install
+
+# Install mpv via Homebrew
+brew install mpv
+
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Install miru
+cargo install --git https://github.com/YannickHerrero/miru
+```
+
+#### Windows
+
+1. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "C++ build tools" workload
+2. Install [Rust](https://rustup.rs/)
+3. Install mpv: `winget install mpv` (or download from https://mpv.io/installation/)
+4. Install miru:
+   ```powershell
+   cargo install --git https://github.com/YannickHerrero/miru
+   ```
+
+#### Windows (WSL)
+
+Miru runs in WSL but can use Windows-native mpv for video playback, avoiding the need for X11/WSLg setup.
+
+```bash
+# In WSL: Install build dependencies
+sudo apt update
+sudo apt install build-essential pkg-config
+
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Install miru
+cargo install --git https://github.com/YannickHerrero/miru
+```
+
+**Configure Windows mpv**: Install mpv on Windows (`winget install mpv`), then point miru to it:
+
+```bash
+miru config --set player_command=/mnt/c/Users/<YourUsername>/AppData/Local/Microsoft/WinGet/Links/mpv.exe
+```
+
+Common mpv paths: Scoop (`scoop/shims/mpv.exe`), Chocolatey (`ProgramData/chocolatey/bin/mpv.exe`).
 
 ## Quick Start
 
@@ -155,56 +256,6 @@ You can also override individual colors using the `[ui.colors]` section with hex
 - Direct torrent streaming via librqbit
 - May require buffering before playback starts
 - Downloaded to temp directory, cleaned up after playback
-
-## Requirements
-
-- [MPV](https://mpv.io/) media player (or another compatible player)
-- [TMDB API key](https://www.themoviedb.org/settings/api) (required)
-  - Needed to search for movies, TV shows, and anime
-  - Get yours from https://www.themoviedb.org/settings/api
-- [Real-Debrid API key](https://real-debrid.com/apitoken) (optional)
-  - For faster, cached playback from Real-Debrid servers
-  - Without it: miru uses direct P2P streaming (may require buffering)
-
-## Running on Windows (WSL)
-
-Miru runs in WSL but can use Windows-native mpv for video playback. This avoids the complexity of setting up X11/WSLg for GUI applications.
-
-### Setup
-
-1. **Install mpv on Windows** (not in WSL):
-   ```powershell
-   # Using winget
-   winget install mpv
-
-   # Or using Scoop
-   scoop install mpv
-
-   # Or download from https://mpv.io/installation/
-   ```
-
-2. **Configure Miru to use Windows mpv**:
-   
-   ```bash
-   miru config --set player_command=/mnt/c/Users/<YourUsername>/scoop/shims/mpv.exe
-   ```
-   
-   Or edit your config file directly (`~/.config/miru/config.toml`):
-   ```toml
-   [player]
-   command = "/mnt/c/Users/<YourUsername>/scoop/shims/mpv.exe"
-   args = ["--fullscreen"]
-   ```
-   
-   Common mpv locations on Windows:
-   - Scoop: `/mnt/c/Users/<User>/scoop/shims/mpv.exe`
-   - Winget/System: `/mnt/c/Program Files/mpv/mpv.exe`
-   - Chocolatey: `/mnt/c/ProgramData/chocolatey/bin/mpv.exe`
-
-3. **Verify it works**:
-   ```bash
-   miru
-   ```
 
 ## License
 

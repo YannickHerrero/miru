@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 description = "A terminal-native streaming CLI for anime, movies, and TV shows"
 license = "MIT"
-repository = "https://github.com/yannick/miru"
+repository = "https://github.com/YannickHerrero/miru"
 keywords = ["anime", "movies", "streaming", "cli", "tui"]
 categories = ["command-line-utilities"]
 
