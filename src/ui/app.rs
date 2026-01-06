@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind},
+    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -302,6 +302,12 @@ impl App {
         key: crossterm::event::KeyEvent,
         _terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     ) -> Result<()> {
+        // Global Ctrl+C handler - always quit
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            self.should_quit = true;
+            return Ok(());
+        }
+
         // Global quit handler
         if key.code == KeyCode::Char('q') && matches!(self.screen, Screen::Search(_)) {
             self.should_quit = true;
@@ -445,8 +451,11 @@ impl App {
                 }
             }
             Screen::Loading(_) => {
-                // Allow cancelling with Esc
-                if key.code == KeyCode::Esc {
+                // Allow cancelling with Esc or Ctrl+C
+                if key.code == KeyCode::Esc
+                    || (key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(KeyModifiers::CONTROL))
+                {
                     self.pending = PendingOperation::None;
                     self.screen = Screen::Search(self.new_search_screen());
                 }
