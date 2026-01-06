@@ -18,12 +18,14 @@ use tokio::sync::RwLock;
 use crate::api::{Media, MediaType, Season, Stream, TmdbClient, TorrentioClient};
 use crate::config::Config;
 use crate::error::Result;
+use crate::history::{WatchHistory, WatchedItem};
 use crate::player::Player;
 use crate::streaming::TorrentStreamer;
 use crate::ui::components::Spinner;
 use crate::ui::screens::{
     EpisodesAction, EpisodesScreen, ErrorAction, ErrorScreen, ResultsAction, ResultsScreen,
-    SearchScreen, SeasonsAction, SeasonsScreen, SourcesAction, SourcesContext, SourcesScreen,
+    SearchAction, SearchScreen, SeasonsAction, SeasonsScreen, SourcesAction, SourcesContext,
+    SourcesScreen,
 };
 use crate::ui::theme::Theme;
 
@@ -58,6 +60,17 @@ enum PendingOperation {
     ResolveStream(Stream),
     /// Start P2P streaming for a torrent
     StartP2PStream(Stream),
+    /// Select an item from watch history
+    SelectHistoryItem(WatchedItem),
+}
+
+/// Context for tracking what's currently being played
+#[derive(Clone)]
+struct PlaybackContext {
+    media: Media,
+    season: u32,
+    episode: u32,
+    episode_title: Option<String>,
 }
 
 /// Main TUI application
@@ -79,6 +92,10 @@ pub struct App {
     /// Streaming HTTP port
     #[allow(dead_code)]
     streaming_port: u16,
+    /// Watch history database
+    history: Option<WatchHistory>,
+    /// Current playback context (for recording history)
+    playback_context: Option<PlaybackContext>,
 }
 
 impl App {
@@ -96,8 +113,17 @@ impl App {
         let player = Player::new(config.player.clone());
         let streaming_port = config.streaming.http_port;
 
+        // Open watch history database
+        let history = WatchHistory::open().ok();
+
+        // Load initial history
+        let recent_history = history
+            .as_ref()
+            .map(|h| h.get_recent_media(10))
+            .unwrap_or_default();
+
         Self {
-            screen: Screen::Search(SearchScreen::new()),
+            screen: Screen::Search(SearchScreen::new_with_history(recent_history)),
             pending: PendingOperation::None,
             should_quit: false,
             tmdb,
@@ -107,7 +133,93 @@ impl App {
             use_direct_streaming,
             torrent_streamer: Arc::new(RwLock::new(None)),
             streaming_port,
+            history,
+            playback_context: None,
         }
+    }
+
+    /// Get recent watch history items
+    pub fn get_recent_history(&self) -> Vec<WatchedItem> {
+        self.history
+            .as_ref()
+            .map(|h| h.get_recent_media(10))
+            .unwrap_or_default()
+    }
+
+    /// Check if an episode is watched
+    #[allow(dead_code)]
+    pub fn is_episode_watched(
+        &self,
+        tmdb_id: i32,
+        media_type: MediaType,
+        season: u32,
+        episode: u32,
+    ) -> bool {
+        self.history
+            .as_ref()
+            .map(|h| h.is_watched(tmdb_id, media_type, season, episode))
+            .unwrap_or(false)
+    }
+
+    /// Get watched episode count for a season
+    #[allow(dead_code)]
+    pub fn watched_episode_count(&self, tmdb_id: i32, season: u32) -> u32 {
+        self.history
+            .as_ref()
+            .map(|h| h.watched_episode_count(tmdb_id, season))
+            .unwrap_or(0)
+    }
+
+    /// Record the current playback to history
+    fn record_playback(&self) {
+        if let (Some(history), Some(ctx)) = (&self.history, &self.playback_context) {
+            let _ = history.mark_watched(
+                ctx.media.tmdb_id(),
+                ctx.media.media_type,
+                &ctx.media.title,
+                ctx.season,
+                ctx.episode,
+                ctx.episode_title.as_deref(),
+                ctx.media.cover_image.as_deref(),
+            );
+        }
+    }
+
+    /// Create a new search screen with current history
+    fn new_search_screen(&self) -> SearchScreen {
+        SearchScreen::new_with_history(self.get_recent_history())
+    }
+
+    /// Get watched episodes for a specific season of a show
+    fn get_watched_episodes_for_season(
+        &self,
+        tmdb_id: i32,
+        season_number: u32,
+    ) -> std::collections::HashSet<u32> {
+        self.history
+            .as_ref()
+            .map(|h| {
+                // Query all watched episodes for this media and season
+                h.get_watched_episodes(tmdb_id, season_number)
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get watched episode counts for all seasons of a show
+    fn get_watched_counts_by_season(
+        &self,
+        tmdb_id: i32,
+        seasons: &[Season],
+    ) -> std::collections::HashMap<u32, u32> {
+        self.history
+            .as_ref()
+            .map(|h| {
+                seasons
+                    .iter()
+                    .map(|s| (s.number, h.watched_episode_count(tmdb_id, s.number)))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Set an initial search query
@@ -202,9 +314,18 @@ impl App {
 
         match &mut self.screen {
             Screen::Search(screen) => {
-                if let Some(query) = screen.handle_key(key) {
-                    self.pending = PendingOperation::Search(query.clone());
-                    self.screen = Screen::Loading(Spinner::new("Searching..."));
+                if let Some(action) = screen.handle_key(key) {
+                    match action {
+                        SearchAction::Search(query) => {
+                            self.pending = PendingOperation::Search(query);
+                            self.screen = Screen::Loading(Spinner::new("Searching..."));
+                        }
+                        SearchAction::SelectHistory(item) => {
+                            // Fetch the media from TMDB and navigate appropriately
+                            self.pending = PendingOperation::SelectHistoryItem(item);
+                            self.screen = Screen::Loading(Spinner::new("Loading..."));
+                        }
+                    }
                 }
             }
             Screen::Results(screen) => {
@@ -215,10 +336,14 @@ impl App {
                             self.screen = Screen::Loading(Spinner::new("Loading..."));
                         }
                         ResultsAction::Back => {
-                            self.screen = Screen::Search(SearchScreen::with_query(&screen.query));
+                            let query = screen.query.clone();
+                            let history = self.get_recent_history();
+                            self.screen = Screen::Search(SearchScreen::with_query_and_history(
+                                &query, history,
+                            ));
                         }
                         ResultsAction::Search => {
-                            self.screen = Screen::Search(SearchScreen::new());
+                            self.screen = Screen::Search(self.new_search_screen());
                         }
                     }
                 }
@@ -232,7 +357,7 @@ impl App {
                             self.screen = Screen::Loading(Spinner::new("Loading episodes..."));
                         }
                         SeasonsAction::Back => {
-                            self.screen = Screen::Search(SearchScreen::new());
+                            self.screen = Screen::Search(self.new_search_screen());
                         }
                     }
                 }
@@ -250,8 +375,38 @@ impl App {
                             };
                             self.screen = Screen::Loading(Spinner::new("Fetching sources..."));
                         }
+                        EpisodesAction::ToggleWatched(episode) => {
+                            let season_num = screen.season_number();
+                            let tmdb_id = screen.media.tmdb_id();
+                            let is_currently_watched = screen.is_watched(episode.number);
+
+                            // Toggle in database
+                            if let Some(history) = &self.history {
+                                if is_currently_watched {
+                                    let _ = history.mark_unwatched(
+                                        tmdb_id,
+                                        screen.media.media_type,
+                                        season_num,
+                                        episode.number,
+                                    );
+                                } else {
+                                    let _ = history.mark_watched(
+                                        tmdb_id,
+                                        screen.media.media_type,
+                                        &screen.media.title,
+                                        season_num,
+                                        episode.number,
+                                        Some(&episode.title),
+                                        screen.media.cover_image.as_deref(),
+                                    );
+                                }
+                            }
+
+                            // Toggle locally in the screen
+                            screen.toggle_watched(episode.number);
+                        }
                         EpisodesAction::Back => {
-                            self.screen = Screen::Search(SearchScreen::new());
+                            self.screen = Screen::Search(self.new_search_screen());
                         }
                     }
                 }
@@ -260,11 +415,18 @@ impl App {
                 if let Some(action) = screen.handle_key(key) {
                     match action {
                         SourcesAction::Select(stream) => {
+                            // Set playback context for history tracking
+                            self.playback_context = Some(PlaybackContext {
+                                media: screen.context.media.clone(),
+                                season: screen.context.season,
+                                episode: screen.context.episode,
+                                episode_title: None, // Could be enhanced to get episode title
+                            });
                             self.pending = PendingOperation::ResolveStream(stream);
                             self.screen = Screen::Loading(Spinner::new("Resolving stream..."));
                         }
                         SourcesAction::Back => {
-                            self.screen = Screen::Search(SearchScreen::new());
+                            self.screen = Screen::Search(self.new_search_screen());
                         }
                         SourcesAction::ToggleUncached => {
                             let new_show_uncached = !screen.show_uncached;
@@ -286,17 +448,17 @@ impl App {
                 // Allow cancelling with Esc
                 if key.code == KeyCode::Esc {
                     self.pending = PendingOperation::None;
-                    self.screen = Screen::Search(SearchScreen::new());
+                    self.screen = Screen::Search(self.new_search_screen());
                 }
             }
             Screen::Error(screen) => {
                 if let Some(action) = screen.handle_key(key) {
                     match action {
                         ErrorAction::Retry => {
-                            self.screen = Screen::Search(SearchScreen::new());
+                            self.screen = Screen::Search(self.new_search_screen());
                         }
                         ErrorAction::Back => {
-                            self.screen = Screen::Search(SearchScreen::new());
+                            self.screen = Screen::Search(self.new_search_screen());
                         }
                     }
                 }
@@ -351,6 +513,54 @@ impl App {
 
             PendingOperation::StartP2PStream(stream) => {
                 self.handle_start_p2p_stream(stream).await;
+            }
+
+            PendingOperation::SelectHistoryItem(item) => {
+                self.handle_select_history_item(item).await;
+            }
+        }
+    }
+
+    /// Handle selecting an item from watch history
+    async fn handle_select_history_item(&mut self, item: WatchedItem) {
+        // Fetch media details from TMDB
+        let result = match item.media_type {
+            MediaType::Movie => self.tmdb.get_movie_details(item.tmdb_id).await,
+            MediaType::TvShow => self.tmdb.get_tv_show_details(item.tmdb_id).await,
+        };
+
+        match result {
+            Ok(media) => {
+                // For movies, go directly to sources
+                // For TV shows, go to the season/episode selection
+                match media.media_type {
+                    MediaType::Movie => {
+                        self.pending = PendingOperation::FetchSources {
+                            media,
+                            season: 0,
+                            episode: 0,
+                            show_uncached: false,
+                        };
+                    }
+                    MediaType::TvShow => {
+                        // If we have season/episode from history, fetch that season's episodes
+                        if item.season > 0 {
+                            let season = Season {
+                                number: item.season,
+                                episode_count: 0, // Will be populated from the episodes
+                            };
+                            self.pending = PendingOperation::FetchEpisodes(media, Some(season));
+                        } else {
+                            self.pending = PendingOperation::FetchSeasons(media);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                self.screen = Screen::Error(ErrorScreen::new(
+                    format!("Failed to load media details: {}", e),
+                    true,
+                ));
             }
         }
     }
@@ -416,9 +626,17 @@ impl App {
                 } else if seasons.len() == 1 {
                     // Only one season, skip to episodes
                     let season = seasons.into_iter().next().unwrap();
-                    self.screen = Screen::Episodes(EpisodesScreen::with_season(media, season));
+                    let watched =
+                        self.get_watched_episodes_for_season(media.tmdb_id(), season.number);
+                    let mut screen = EpisodesScreen::with_season(media, season);
+                    screen.set_watched_episodes(watched);
+                    self.screen = Screen::Episodes(screen);
                 } else {
-                    self.screen = Screen::Seasons(SeasonsScreen::new(media, seasons));
+                    let watched_counts =
+                        self.get_watched_counts_by_season(media.tmdb_id(), &seasons);
+                    let mut screen = SeasonsScreen::new(media, seasons);
+                    screen.set_watched_counts(watched_counts);
+                    self.screen = Screen::Seasons(screen);
                 }
             }
             Err(e) => {
@@ -431,10 +649,17 @@ impl App {
     async fn handle_fetch_episodes(&mut self, media: Media, season: Option<Season>) {
         match season {
             Some(s) => {
-                self.screen = Screen::Episodes(EpisodesScreen::with_season(media, s));
+                let watched = self.get_watched_episodes_for_season(media.tmdb_id(), s.number);
+                let mut screen = EpisodesScreen::with_season(media, s);
+                screen.set_watched_episodes(watched);
+                self.screen = Screen::Episodes(screen);
             }
             None => {
-                self.screen = Screen::Episodes(EpisodesScreen::new(media));
+                // For anime without seasons, use season 1
+                let watched = self.get_watched_episodes_for_season(media.tmdb_id(), 1);
+                let mut screen = EpisodesScreen::new(media);
+                screen.set_watched_episodes(watched);
+                self.screen = Screen::Episodes(screen);
             }
         }
     }
@@ -664,6 +889,9 @@ impl App {
 
     /// Play a URL with the configured player
     fn play_url(&mut self, url: &str) {
+        // Record to watch history when playback starts
+        self.record_playback();
+
         // Restore terminal before launching player
         disable_raw_mode().ok();
         execute!(io::stdout(), LeaveAlternateScreen).ok();
@@ -673,7 +901,9 @@ impl App {
                 // Player finished, restore TUI
                 enable_raw_mode().ok();
                 execute!(io::stdout(), EnterAlternateScreen).ok();
-                self.screen = Screen::Search(SearchScreen::new());
+                // Return to search screen with updated history
+                self.screen =
+                    Screen::Search(SearchScreen::new_with_history(self.get_recent_history()));
             }
             Err(e) => {
                 // Restore TUI even on error
@@ -682,6 +912,9 @@ impl App {
                 self.screen = Screen::Error(ErrorScreen::new(e.to_string(), false));
             }
         }
+
+        // Clear playback context
+        self.playback_context = None;
     }
 
     /// Cleanup torrent streamer on shutdown

@@ -54,6 +54,12 @@ librqbit = "8.1"
 # Temp directories
 tempfile = "3"
 
+# SQLite for watch history
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# DateTime handling
+chrono = { version = "0.4", features = ["serde"] }
+
 # Vendored OpenSSL (required by librqbit, avoids system libssl-dev dependency)
 openssl = { version = "0.10", features = ["vendored"] }
 

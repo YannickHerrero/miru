@@ -88,13 +88,31 @@ impl Input {
 
     /// Render the input
     pub fn render(&self, frame: &mut Frame, area: Rect, title: &str, theme: &Theme) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(if self.focused {
+        self.render_with_style(
+            frame,
+            area,
+            title,
+            theme,
+            if self.focused {
                 theme.highlight()
             } else {
                 theme.border()
-            })
+            },
+        );
+    }
+
+    /// Render the input with a custom border style
+    pub fn render_with_style(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        title: &str,
+        theme: &Theme,
+        border_style: Style,
+    ) {
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(border_style)
             .title(title);
 
         // Build the input line with cursor

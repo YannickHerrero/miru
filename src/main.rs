@@ -2,6 +2,7 @@ mod api;
 mod cli;
 mod config;
 mod error;
+mod history;
 mod player;
 mod streaming;
 mod ui;

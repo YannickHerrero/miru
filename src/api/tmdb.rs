@@ -206,6 +206,45 @@ impl TmdbClient {
             })
             .collect())
     }
+
+    /// Get movie details by ID
+    pub async fn get_movie_details(&self, movie_id: i32) -> Result<Media, ApiError> {
+        let url = format!(
+            "{}/movie/{}?api_key={}",
+            TMDB_API_URL, movie_id, self.api_key
+        );
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(ApiError::Tmdb(format!("HTTP {}", response.status())));
+        }
+
+        let data: MovieDetailsResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Tmdb(format!("Failed to parse response: {}", e)))?;
+
+        Ok(Media::from(data))
+    }
+
+    /// Get TV show details by ID (returns Media object)
+    pub async fn get_tv_show_details(&self, tv_id: i32) -> Result<Media, ApiError> {
+        let url = format!("{}/tv/{}?api_key={}", TMDB_API_URL, tv_id, self.api_key);
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(ApiError::Tmdb(format!("HTTP {}", response.status())));
+        }
+
+        let data: TvShowDetailsResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Tmdb(format!("Failed to parse response: {}", e)))?;
+
+        Ok(Media::from(data))
+    }
 }
 
 impl Default for TmdbClient {
@@ -261,6 +300,41 @@ struct ExternalIdsResponse {
 struct TvDetailsResponse {
     #[serde(default)]
     seasons: Vec<SeasonInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MovieDetailsResponse {
+    id: i32,
+    title: String,
+    original_title: Option<String>,
+    release_date: Option<String>,
+    vote_average: Option<f32>,
+    poster_path: Option<String>,
+    overview: Option<String>,
+    #[serde(default)]
+    genres: Vec<GenreInfo>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TvShowDetailsResponse {
+    id: i32,
+    name: String,
+    original_name: Option<String>,
+    first_air_date: Option<String>,
+    vote_average: Option<f32>,
+    poster_path: Option<String>,
+    overview: Option<String>,
+    #[serde(default)]
+    genres: Vec<GenreInfo>,
+    status: Option<String>,
+    number_of_seasons: Option<i32>,
+    number_of_episodes: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GenreInfo {
+    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -325,6 +399,64 @@ impl From<TvResult> for Media {
             status: None, // Would need additional API call
             format: Some("TV".to_string()),
             genres: genres_from_ids(&tv.genre_ids),
+        }
+    }
+}
+
+impl From<MovieDetailsResponse> for Media {
+    fn from(movie: MovieDetailsResponse) -> Self {
+        let year = movie
+            .release_date
+            .as_ref()
+            .and_then(|d| d.split('-').next())
+            .and_then(|y| y.parse().ok());
+
+        Self {
+            media_type: MediaType::Movie,
+            source: MediaSource::Tmdb { id: movie.id },
+            title: movie.title,
+            title_original: movie.original_title,
+            imdb_id: None,
+            year,
+            score: movie.vote_average,
+            episodes: None,
+            seasons: None,
+            cover_image: movie
+                .poster_path
+                .map(|p| format!("{}{}", TMDB_IMAGE_BASE, p)),
+            episode_titles: vec![],
+            description: movie.overview,
+            status: movie.status,
+            format: Some("Movie".to_string()),
+            genres: movie.genres.into_iter().map(|g| g.name).collect(),
+        }
+    }
+}
+
+impl From<TvShowDetailsResponse> for Media {
+    fn from(tv: TvShowDetailsResponse) -> Self {
+        let year = tv
+            .first_air_date
+            .as_ref()
+            .and_then(|d| d.split('-').next())
+            .and_then(|y| y.parse().ok());
+
+        Self {
+            media_type: MediaType::TvShow,
+            source: MediaSource::Tmdb { id: tv.id },
+            title: tv.name,
+            title_original: tv.original_name,
+            imdb_id: None,
+            year,
+            score: tv.vote_average,
+            episodes: tv.number_of_episodes,
+            seasons: tv.number_of_seasons,
+            cover_image: tv.poster_path.map(|p| format!("{}{}", TMDB_IMAGE_BASE, p)),
+            episode_titles: vec![],
+            description: tv.overview,
+            status: tv.status,
+            format: Some("TV".to_string()),
+            genres: tv.genres.into_iter().map(|g| g.name).collect(),
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -20,6 +22,8 @@ pub enum SeasonsAction {
 pub struct SeasonsScreen {
     pub media: Media,
     pub list: SelectableList<Season>,
+    /// Map of season number -> watched episode count
+    watched_counts: HashMap<u32, u32>,
 }
 
 impl SeasonsScreen {
@@ -27,7 +31,13 @@ impl SeasonsScreen {
         Self {
             list: SelectableList::new(seasons),
             media,
+            watched_counts: HashMap::new(),
         }
+    }
+
+    /// Set watched episode counts for each season
+    pub fn set_watched_counts(&mut self, counts: HashMap<u32, u32>) {
+        self.watched_counts = counts;
     }
 
     /// Handle key input
@@ -80,6 +90,8 @@ impl SeasonsScreen {
             )]));
             frame.render_widget(no_seasons, chunks[1]);
         } else {
+            let watched_counts = self.watched_counts.clone();
+
             self.list.render(
                 frame,
                 chunks[1],
@@ -93,10 +105,25 @@ impl SeasonsScreen {
                     };
                     let muted = theme.muted();
 
-                    vec![
-                        Span::styled(format!("Season {} ", season.number), style),
-                        Span::styled(format!("({} episodes)", season.episode_count), muted),
-                    ]
+                    let mut spans = vec![Span::styled(format!("Season {} ", season.number), style)];
+
+                    // Show watched count if any episodes are watched
+                    let watched = watched_counts.get(&season.number).copied().unwrap_or(0);
+                    if watched > 0 {
+                        let all_watched = watched >= season.episode_count;
+                        let count_style = if all_watched { theme.success() } else { muted };
+                        spans.push(Span::styled(
+                            format!("({}/{} watched)", watched, season.episode_count),
+                            count_style,
+                        ));
+                    } else {
+                        spans.push(Span::styled(
+                            format!("({} episodes)", season.episode_count),
+                            muted,
+                        ));
+                    }
+
+                    spans
                 },
             );
         }

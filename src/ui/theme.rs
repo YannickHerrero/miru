@@ -86,6 +86,11 @@ impl Theme {
     pub fn info(&self) -> Style {
         Style::default().fg(self.success)
     }
+
+    /// Style for success indicators (checkmarks, etc.)
+    pub fn success(&self) -> Style {
+        Style::default().fg(self.success)
+    }
 }
 
 /// Selection arrow character
