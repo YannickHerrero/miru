@@ -554,11 +554,23 @@ impl App {
                     MediaType::TvShow => {
                         // If we have season/episode from history, fetch that season's episodes
                         if item.season > 0 {
-                            let season = Season {
-                                number: item.season,
-                                episode_count: 0, // Will be populated from the episodes
-                            };
-                            self.pending = PendingOperation::FetchEpisodes(media, Some(season));
+                            // Fetch seasons to get the correct episode_count
+                            match self.tmdb.get_tv_details(media.tmdb_id()).await {
+                                Ok(seasons) => {
+                                    if let Some(season) =
+                                        seasons.into_iter().find(|s| s.number == item.season)
+                                    {
+                                        self.pending =
+                                            PendingOperation::FetchEpisodes(media, Some(season));
+                                    } else {
+                                        // Fallback to fetching all seasons if the specific season isn't found
+                                        self.pending = PendingOperation::FetchSeasons(media);
+                                    }
+                                }
+                                Err(_) => {
+                                    self.pending = PendingOperation::FetchSeasons(media);
+                                }
+                            }
                         } else {
                             self.pending = PendingOperation::FetchSeasons(media);
                         }
