@@ -2,7 +2,7 @@ name: Build iOS/iSH Binary
 
 on:
   release:
-    types: [created, prereleased]
+    types: [published]
   workflow_dispatch:
 
 env:
