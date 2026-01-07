@@ -144,22 +144,22 @@ Common mpv paths: Scoop (`scoop/shims/mpv.exe`), Chocolatey (`ProgramData/chocol
 <details>
 <summary><strong>iOS (iSH)</strong></summary>
 
-Miru can run on iOS using the [iSH](https://ish.app/) terminal emulator app. Since iOS doesn't allow direct process launching, miru displays a clickable VLC link that opens the stream in the [VLC for iOS](https://apps.apple.com/app/vlc-for-mobile/id650377962) app.
+Miru can run on iOS using the [iSH](https://ish.app/) terminal emulator app. Since iOS doesn't allow direct process launching, miru displays a clickable "Open in VLC" link that opens the stream in [VLC for iOS](https://apps.apple.com/app/vlc-for-mobile/id650377962).
 
 **Requirements:**
 - [iSH](https://ish.app/) - Linux terminal emulator for iOS
 - [VLC for iOS](https://apps.apple.com/app/vlc-for-mobile/id650377962) - Video player with URL scheme support
-- **Real-Debrid account** (recommended) - P2P streaming may not work reliably on iOS due to network restrictions
+- **Real-Debrid account** (required) - See note below
 
-**Installation in iSH:**
+> **Note:** The iOS build does not include P2P streaming support because the underlying cryptography library (`ring`) requires CPU instructions (SSE2) not available in iSH's emulated i586 environment. A Real-Debrid account is required for streaming on iOS.
 
-**Option 1: Download pre-built binary (Recommended)**
+**Installation:**
 
 Download the pre-built static binary from GitHub releases:
 
 ```bash
-# Download the latest binary
-wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-i686-linux-musl -O miru
+# Download the latest iOS binary
+wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-ios -O miru
 
 # Make it executable
 chmod +x miru
@@ -171,30 +171,15 @@ mv miru /usr/local/bin/
 Optionally, verify the download with the checksum:
 
 ```bash
-wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-i686-linux-musl.sha256
-sha256sum -c miru-i686-linux-musl.sha256
-```
-
-**Option 2: Build from source**
-
-Building from source in iSH is possible but very slow (several hours):
-
-```bash
-# Install dependencies
-apk add build-base pkgconfig
-
-# Install Rust
-apk add rust cargo
-
-# Install miru (this may take several hours)
-cargo install --git https://github.com/YannickHerrero/miru
+wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-ios.sha256
+sha256sum -c miru-ios.sha256
 ```
 
 **Usage:**
 1. Run `miru` and search for content
-2. When you select a source, a "Open in VLC" link will appear
+2. When you select a source, clickable "Open in VLC" links will appear
 3. Tap the link to open VLC and start playback
-4. Press Enter or Esc to return to miru
+4. Press Enter to return to miru
 
 iOS mode is auto-detected when running in iSH. You can also manually enable/disable it:
 

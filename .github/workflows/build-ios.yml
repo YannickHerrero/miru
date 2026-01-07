@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: miru-i686-linux-musl
+  BINARY_NAME: miru-ios
 
 jobs:
   test:
@@ -67,20 +67,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-registry-
 
-      - name: Cache cargo build (musl)
+      - name: Cache cargo build (i586-musl)
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-cargo-build-musl-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-build-i586-musl-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-build-musl-
+            ${{ runner.os }}-cargo-build-i586-musl-
 
       - name: Build release binary with cross
-        run: cross build --release --target i686-unknown-linux-musl
+        run: cross build --release --target i586-unknown-linux-musl --no-default-features --features native-tls
 
       - name: Prepare binary
         run: |
-          cp target/i686-unknown-linux-musl/release/miru ${{ env.BINARY_NAME }}
+          cp target/i586-unknown-linux-musl/release/miru ${{ env.BINARY_NAME }}
           chmod +x ${{ env.BINARY_NAME }}
 
       - name: Generate SHA256 checksum
