@@ -4,6 +4,7 @@ mod config;
 mod error;
 mod history;
 mod player;
+#[cfg(feature = "p2p")]
 mod streaming;
 mod ui;
 

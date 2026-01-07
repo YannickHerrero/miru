@@ -1,0 +1,8 @@
+# Cross-compilation configuration for miru
+# See: https://github.com/cross-rs/cross
+
+# Using i586 target for iSH compatibility
+# i586 target does not require SSE, using software floating-point
+
+[target.i586-unknown-linux-musl]
+# No special configuration needed - i586 target already uses soft-float

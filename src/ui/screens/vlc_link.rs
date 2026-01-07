@@ -1,9 +1,9 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Paragraph, Wrap},
     Frame,
 };
 
@@ -20,6 +20,7 @@ pub struct VlcLinkScreen {
     /// The VLC URL scheme link (vlc://...)
     vlc_url: String,
     /// The original stream URL (for display purposes)
+    #[allow(dead_code)]
     stream_url: String,
     /// Optional media title for display
     title: Option<String>,
@@ -49,17 +50,15 @@ impl VlcLinkScreen {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Percentage(25),
-                Constraint::Length(3), // Title
-                Constraint::Length(2), // Spacing
-                Constraint::Length(3), // Instructions
-                Constraint::Length(2), // Spacing
-                Constraint::Length(5), // VLC Link box
-                Constraint::Length(2), // Spacing
-                Constraint::Length(2), // Stream URL (truncated)
-                Constraint::Length(3), // Spacing
+                Constraint::Length(2), // Top padding
+                Constraint::Length(2), // Title
+                Constraint::Length(1), // Spacing
+                Constraint::Length(2), // Instructions
+                Constraint::Length(1), // Spacing
+                Constraint::Min(6),    // VLC URL (flexible height for wrapping)
+                Constraint::Length(1), // Spacing
                 Constraint::Length(2), // Help text
-                Constraint::Min(0),
+                Constraint::Length(1), // Bottom padding
             ])
             .split(area);
 
@@ -78,40 +77,23 @@ impl VlcLinkScreen {
 
         // Instructions
         let instructions = Paragraph::new(vec![Line::from(vec![Span::styled(
-            "Tap the link below to open in VLC for iOS",
+            "Tap the link below to open in VLC:",
             theme.normal(),
         )])])
         .alignment(Alignment::Center);
         frame.render_widget(instructions, chunks[3]);
 
-        // VLC Link with OSC 8 hyperlink escape sequence
-        // Format: \x1b]8;;URL\x1b\\LINK_TEXT\x1b]8;;\x1b\\
-        let clickable_link = format!(
-            "\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\",
-            self.vlc_url, "[ Open in VLC ]"
-        );
-
-        let link_line = Line::from(vec![Span::styled(
-            clickable_link,
+        // VLC URL - displayed as plain text without OSC 8
+        // iOS terminal should auto-detect it as a clickable URL
+        let url_widget = Paragraph::new(Line::from(vec![Span::styled(
+            self.vlc_url.clone(),
             Style::default()
-                .fg(ratatui::style::Color::Cyan)
-                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-        )]);
-        let link_widget = Paragraph::new(link_line).alignment(Alignment::Center);
-        frame.render_widget(link_widget, chunks[5]);
-
-        // Stream URL (truncated for display)
-        let display_url = if self.stream_url.len() > 60 {
-            format!("{}...", &self.stream_url[..57])
-        } else {
-            self.stream_url.clone()
-        };
-        let url_info = Paragraph::new(Line::from(vec![
-            Span::styled("Stream: ", theme.muted()),
-            Span::styled(display_url, theme.muted()),
-        ]))
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::UNDERLINED),
+        )]))
+        .wrap(Wrap { trim: false })
         .alignment(Alignment::Center);
-        frame.render_widget(url_info, chunks[7]);
+        frame.render_widget(url_widget, chunks[5]);
 
         // Help text
         let help = Paragraph::new(Line::from(vec![
@@ -122,6 +104,6 @@ impl VlcLinkScreen {
             Span::styled(" to return", theme.muted()),
         ]))
         .alignment(Alignment::Center);
-        frame.render_widget(help, chunks[9]);
+        frame.render_widget(help, chunks[7]);
     }
 }

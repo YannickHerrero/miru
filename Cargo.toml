@@ -8,12 +8,21 @@ repository = "https://github.com/YannickHerrero/miru"
 keywords = ["anime", "movies", "streaming", "cli", "tui"]
 categories = ["command-line-utilities"]
 
+[features]
+default = ["rustls-tls", "p2p"]
+# Use rustls for TLS (requires SSE2 on x86, won't work on iSH)
+rustls-tls = ["reqwest/rustls-tls"]
+# Use native-tls (OpenSSL) for TLS (works on iSH)
+native-tls = ["reqwest/native-tls", "dep:openssl"]
+# P2P torrent streaming (requires ring which needs SSE2, won't work on iSH)
+p2p = ["dep:librqbit", "dep:openssl"]
+
 [dependencies]
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# HTTP client
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# HTTP client - features controlled by our own features
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
 # CLI argument parsing
 clap = { version = "4", features = ["derive"] }
@@ -49,7 +58,8 @@ lazy_static = "1"
 which = "6"
 
 # Torrent streaming (for direct P2P playback without debrid)
-librqbit = "8.1"
+# Optional: disabled for iSH builds due to ring's SSE2 requirement
+librqbit = { version = "8.1", optional = true }
 
 # Temp directories
 tempfile = "3"
@@ -60,8 +70,9 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 # DateTime handling
 chrono = { version = "0.4", features = ["serde"] }
 
-# Vendored OpenSSL (required by librqbit, avoids system libssl-dev dependency)
-openssl = { version = "0.10", features = ["vendored"] }
+# Vendored OpenSSL (required by librqbit and native-tls)
+# Optional: only needed for p2p or native-tls features
+openssl = { version = "0.10", features = ["vendored"], optional = true }
 
 [profile.release]
 lto = true

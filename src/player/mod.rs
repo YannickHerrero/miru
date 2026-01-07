@@ -1,4 +1,5 @@
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use crate::config::PlayerConfig;
 use crate::error::PlayerError;
@@ -26,9 +27,34 @@ impl Player {
     /// Generate VLC URL scheme for iOS
     /// VLC for iOS supports vlc:// URL scheme to open and play media
     pub fn generate_vlc_url(&self, stream_url: &str) -> String {
-        // URL-encode the stream URL for the vlc:// scheme
-        let encoded_url = urlencoding::encode(stream_url);
-        format!("vlc://{}", encoded_url)
+        // VLC expects a raw URL after vlc:// - no encoding needed
+        format!("vlc://{}", stream_url)
+    }
+
+    /// Shorten a URL using is.gd service for easier copying on iOS
+    /// Returns the shortened URL or None if the service is unavailable
+    pub async fn shorten_url(url: &str) -> Option<String> {
+        let api_url = format!(
+            "https://is.gd/create.php?format=simple&url={}",
+            urlencoding::encode(url)
+        );
+
+        let client = reqwest::Client::new();
+        match client
+            .get(&api_url)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    response.text().await.ok().map(|s| s.trim().to_string())
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
     }
 
     /// Play a URL with the configured player

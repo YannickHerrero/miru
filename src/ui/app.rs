@@ -20,6 +20,7 @@ use crate::config::{save_config, Config};
 use crate::error::Result;
 use crate::history::{WatchHistory, WatchedItem};
 use crate::player::Player;
+#[cfg(feature = "p2p")]
 use crate::streaming::TorrentStreamer;
 use crate::ui::components::Spinner;
 use crate::ui::screens::{
@@ -61,9 +62,15 @@ enum PendingOperation {
     },
     ResolveStream(Stream),
     /// Start P2P streaming for a torrent
+    #[cfg(feature = "p2p")]
     StartP2PStream(Stream),
     /// Select an item from watch history
     SelectHistoryItem(WatchedItem),
+    /// Prepare VLC URL for iOS (shorten URL)
+    PrepareVlcUrl {
+        stream_url: String,
+        title: Option<String>,
+    },
 }
 
 /// Context for tracking what's currently being played
@@ -94,6 +101,7 @@ pub struct App {
     #[allow(dead_code)]
     use_direct_streaming: bool,
     /// Torrent streamer for P2P playback (lazily initialized)
+    #[cfg(feature = "p2p")]
     torrent_streamer: Arc<RwLock<Option<TorrentStreamer>>>,
     /// Streaming HTTP port
     #[allow(dead_code)]
@@ -142,6 +150,7 @@ impl App {
             theme_variant,
             config,
             use_direct_streaming,
+            #[cfg(feature = "p2p")]
             torrent_streamer: Arc::new(RwLock::new(None)),
             streaming_port,
             history,
@@ -567,6 +576,7 @@ impl App {
                 self.handle_resolve_stream(stream).await;
             }
 
+            #[cfg(feature = "p2p")]
             PendingOperation::StartP2PStream(stream) => {
                 self.handle_start_p2p_stream(stream).await;
             }
@@ -574,7 +584,66 @@ impl App {
             PendingOperation::SelectHistoryItem(item) => {
                 self.handle_select_history_item(item).await;
             }
+
+            PendingOperation::PrepareVlcUrl { stream_url, title } => {
+                self.handle_prepare_vlc_url(stream_url, title).await;
+            }
         }
+    }
+
+    /// Prepare VLC URL for iOS - shorten the URL for easier copying
+    async fn handle_prepare_vlc_url(&mut self, stream_url: String, title: Option<String>) {
+        // Generate full VLC URL with original stream
+        let full_vlc_url = self.player.generate_vlc_url(&stream_url);
+
+        // Try to shorten the stream URL, then prepend vlc://
+        // This gives us vlc://https://is.gd/xxx which VLC can open
+        let short_url = Player::shorten_url(&stream_url).await;
+        let display_url = match &short_url {
+            Some(s) => format!("vlc://{}", s),
+            None => full_vlc_url.clone(),
+        };
+
+        // Print the VLC URL outside of ratatui for clickability testing
+        // This exits alternate screen, prints, then re-enters
+        disable_raw_mode().ok();
+        execute!(io::stdout(), LeaveAlternateScreen).ok();
+
+        // Print the vlc:// URLs
+        println!("\n=== VLC URL (tap to open in VLC) ===");
+        if let Some(ref t) = title {
+            println!("Title: {}", t);
+        }
+
+        // OSC 8 hyperlink format: \x1b]8;;URL\x1b\\LABEL\x1b]8;;\x1b\\
+        // This creates a clickable label that opens the URL when tapped
+
+        // Shortened URL with clickable label
+        if short_url.is_some() {
+            println!(
+                "\n\x1b]8;;{}\x1b\\>>> Open in VLC (short) <<<\x1b]8;;\x1b\\",
+                display_url
+            );
+            println!("    {}", display_url);
+        }
+
+        // Full URL with clickable label
+        println!(
+            "\n\x1b]8;;{}\x1b\\>>> Open in VLC (full) <<<\x1b]8;;\x1b\\",
+            full_vlc_url
+        );
+        println!("    {}", full_vlc_url);
+
+        println!("\nPress Enter to return to miru...");
+
+        // Wait for user input before returning
+        let _ = io::stdin().read_line(&mut String::new());
+
+        // Re-enter alternate screen
+        enable_raw_mode().ok();
+        execute!(io::stdout(), EnterAlternateScreen).ok();
+
+        self.screen = Screen::VlcLink(VlcLinkScreen::new(display_url, stream_url, title));
     }
 
     /// Handle selecting an item from watch history
@@ -861,9 +930,20 @@ impl App {
             // Real-Debrid: we have a direct HTTP URL
             self.play_url(url);
         } else if stream.info_hash.is_some() {
-            // P2P streaming: need to use TorrentStreamer
-            self.pending = PendingOperation::StartP2PStream(stream);
-            self.screen = Screen::Loading(Spinner::new("Starting P2P stream..."));
+            #[cfg(feature = "p2p")]
+            {
+                // P2P streaming: need to use TorrentStreamer
+                self.pending = PendingOperation::StartP2PStream(stream);
+                self.screen = Screen::Loading(Spinner::new("Starting P2P stream..."));
+            }
+            #[cfg(not(feature = "p2p"))]
+            {
+                let _ = stream; // Suppress unused warning
+                self.screen = Screen::Error(ErrorScreen::new(
+                    "P2P streaming is not available on this platform.\nPlease configure Real-Debrid for streaming.".to_string(),
+                    false,
+                ));
+            }
         } else {
             self.screen = Screen::Error(ErrorScreen::new(
                 "No URL or torrent hash available for this source".to_string(),
@@ -873,6 +953,7 @@ impl App {
     }
 
     /// Start P2P streaming for a torrent
+    #[cfg(feature = "p2p")]
     async fn handle_start_p2p_stream(&mut self, stream: Stream) {
         // Get the magnet link
         let magnet = match stream.magnet_link() {
@@ -960,9 +1041,8 @@ impl App {
         // Record to watch history when playback starts
         self.record_playback();
 
-        // Check if iOS mode is enabled - show VLC link instead of launching player
+        // Check if iOS mode is enabled - prepare VLC URL (async shortening)
         if self.player.is_ios_mode() {
-            let vlc_url = self.player.generate_vlc_url(url);
             let title = self.playback_context.as_ref().map(|ctx| {
                 if ctx.season > 0 {
                     format!("{} S{:02}E{:02}", ctx.media.title, ctx.season, ctx.episode)
@@ -970,7 +1050,10 @@ impl App {
                     ctx.media.title.clone()
                 }
             });
-            self.screen = Screen::VlcLink(VlcLinkScreen::new(vlc_url, url.to_string(), title));
+            self.pending = PendingOperation::PrepareVlcUrl {
+                stream_url: url.to_string(),
+                title,
+            };
             return;
         }
 
@@ -1000,6 +1083,7 @@ impl App {
     }
 
     /// Cleanup torrent streamer on shutdown
+    #[cfg(feature = "p2p")]
     #[allow(dead_code)]
     pub async fn cleanup(&self) {
         let streamer_guard = self.torrent_streamer.read().await;
