@@ -159,7 +159,7 @@ Download the pre-built static binary from GitHub releases:
 
 ```bash
 # Download the latest binary
-wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-x86_64-linux-musl -O miru
+wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-i686-linux-musl -O miru
 
 # Make it executable
 chmod +x miru
@@ -171,8 +171,8 @@ mv miru /usr/local/bin/
 Optionally, verify the download with the checksum:
 
 ```bash
-wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-x86_64-linux-musl.sha256
-sha256sum -c miru-x86_64-linux-musl.sha256
+wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-i686-linux-musl.sha256
+sha256sum -c miru-i686-linux-musl.sha256
 ```
 
 **Option 2: Build from source**
