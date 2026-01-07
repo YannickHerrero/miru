@@ -25,7 +25,7 @@ use crate::ui::components::Spinner;
 use crate::ui::screens::{
     EpisodesAction, EpisodesScreen, ErrorAction, ErrorScreen, ResultsAction, ResultsScreen,
     SearchAction, SearchScreen, SeasonsAction, SeasonsScreen, SourcesAction, SourcesContext,
-    SourcesScreen,
+    SourcesScreen, VlcLinkAction, VlcLinkScreen,
 };
 use crate::ui::theme::{Theme, ThemeVariant};
 
@@ -38,6 +38,8 @@ enum Screen {
     Sources(SourcesScreen),
     Loading(Spinner),
     Error(ErrorScreen),
+    /// VLC link screen for iOS mode - displays clickable VLC URL
+    VlcLink(VlcLinkScreen),
 }
 
 /// Pending async operation
@@ -318,6 +320,7 @@ impl App {
                 spinner.render(frame, chunks[1], &self.theme);
             }
             Screen::Error(screen) => screen.render(frame, area, &self.theme),
+            Screen::VlcLink(screen) => screen.render(frame, area, &self.theme),
         }
     }
 
@@ -498,6 +501,20 @@ impl App {
                         }
                         ErrorAction::Back => {
                             self.screen = Screen::Search(self.new_search_screen());
+                        }
+                    }
+                }
+            }
+            Screen::VlcLink(screen) => {
+                if let Some(action) = screen.handle_key(key) {
+                    match action {
+                        VlcLinkAction::Back => {
+                            // Return to search screen with updated history
+                            self.screen = Screen::Search(SearchScreen::new_with_history(
+                                self.get_recent_history(),
+                            ));
+                            // Clear playback context
+                            self.playback_context = None;
                         }
                     }
                 }
@@ -942,6 +959,20 @@ impl App {
     fn play_url(&mut self, url: &str) {
         // Record to watch history when playback starts
         self.record_playback();
+
+        // Check if iOS mode is enabled - show VLC link instead of launching player
+        if self.player.is_ios_mode() {
+            let vlc_url = self.player.generate_vlc_url(url);
+            let title = self.playback_context.as_ref().map(|ctx| {
+                if ctx.season > 0 {
+                    format!("{} S{:02}E{:02}", ctx.media.title, ctx.season, ctx.episode)
+                } else {
+                    ctx.media.title.clone()
+                }
+            });
+            self.screen = Screen::VlcLink(VlcLinkScreen::new(vlc_url, url.to_string(), title));
+            return;
+        }
 
         // Restore terminal before launching player
         disable_raw_mode().ok();

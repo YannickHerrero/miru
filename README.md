@@ -123,6 +123,47 @@ miru config --set player_command=/mnt/c/Users/<YourUsername>/AppData/Local/Micro
 
 Common mpv paths: Scoop (`scoop/shims/mpv.exe`), Chocolatey (`ProgramData/chocolatey/bin/mpv.exe`).
 
+#### iOS (iSH)
+
+Miru can run on iOS using the [iSH](https://ish.app/) terminal emulator app. Since iOS doesn't allow direct process launching, miru displays a clickable VLC link that opens the stream in the [VLC for iOS](https://apps.apple.com/app/vlc-for-mobile/id650377962) app.
+
+**Requirements:**
+- [iSH](https://ish.app/) - Linux terminal emulator for iOS
+- [VLC for iOS](https://apps.apple.com/app/vlc-for-mobile/id650377962) - Video player with URL scheme support
+- **Real-Debrid account** (recommended) - P2P streaming may not work reliably on iOS due to network restrictions
+
+**Installation in iSH:**
+
+```bash
+# Install dependencies
+apk add build-base pkgconfig
+
+# Install Rust
+apk add rust cargo
+
+# Install miru
+cargo install --git https://github.com/YannickHerrero/miru
+```
+
+**Note:** Building from source in iSH may take a long time due to iOS device limitations. Consider cross-compiling for Alpine Linux x86 on a faster machine.
+
+**Usage:**
+1. Run `miru` and search for content
+2. When you select a source, a "Open in VLC" link will appear
+3. Tap the link to open VLC and start playback
+4. Press Enter or Esc to return to miru
+
+iOS mode is auto-detected when running in iSH. You can also manually enable/disable it:
+
+```bash
+# Force enable iOS mode
+export MIRU_IOS_MODE=1
+
+# Or in config.toml:
+# [player]
+# ios_mode = "true"
+```
+
 ## Quick Start
 
 1. Get your API keys:

@@ -146,6 +146,16 @@ pub struct PlayerConfig {
     /// Additional arguments passed to player
     #[serde(default)]
     pub args: Vec<String>,
+
+    /// iOS mode: when enabled, displays a clickable VLC URL instead of launching player directly.
+    /// Auto-detected when running in iSH terminal app, or can be manually enabled.
+    /// Set to "auto" (default), "true", or "false".
+    #[serde(default = "default_ios_mode")]
+    pub ios_mode: String,
+}
+
+fn default_ios_mode() -> String {
+    "auto".to_string()
 }
 
 impl Default for PlayerConfig {
@@ -153,6 +163,7 @@ impl Default for PlayerConfig {
         Self {
             command: default_player_command(),
             args: vec!["--fullscreen".to_string()],
+            ios_mode: default_ios_mode(),
         }
     }
 }
@@ -163,8 +174,48 @@ impl PlayerConfig {
         Self {
             command: "vlc".to_string(),
             args: vec!["--fullscreen".to_string(), "--play-and-exit".to_string()],
+            ios_mode: default_ios_mode(),
         }
     }
+
+    /// Check if iOS mode is enabled (either explicitly or auto-detected)
+    pub fn is_ios_mode(&self) -> bool {
+        match self.ios_mode.to_lowercase().as_str() {
+            "true" | "yes" | "1" => true,
+            "false" | "no" | "0" => false,
+            _ => detect_ios_environment(),
+        }
+    }
+}
+
+/// Detect if running in an iOS terminal environment (iSH)
+fn detect_ios_environment() -> bool {
+    // Check for MIRU_IOS_MODE environment variable first
+    if let Ok(val) = std::env::var("MIRU_IOS_MODE") {
+        return matches!(val.to_lowercase().as_str(), "1" | "true" | "yes");
+    }
+
+    // iSH detection: Check for iSH-specific characteristics
+    // iSH sets certain environment variables and has specific /proc characteristics
+
+    // Method 1: Check if running under iSH by looking at /proc/ish
+    if std::path::Path::new("/proc/ish").exists() {
+        return true;
+    }
+
+    // Method 2: Check for iSH-specific environment variable
+    if std::env::var("ISH_VERSION").is_ok() {
+        return true;
+    }
+
+    // Method 3: Check kernel version for "ish" signature
+    if let Ok(version) = std::fs::read_to_string("/proc/version") {
+        if version.to_lowercase().contains("ish") {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn default_player_command() -> String {
