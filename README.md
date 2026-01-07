@@ -28,7 +28,8 @@ https://github.com/user-attachments/assets/0fc5c941-bcf2-4b0a-bdbf-791b87337e22
 
 Miru requires the [Rust toolchain](https://rustup.rs/) and a C compiler.
 
-#### Linux (Debian/Ubuntu)
+<details>
+<summary><strong>Linux (Debian/Ubuntu)</strong></summary>
 
 ```bash
 # Install dependencies
@@ -43,7 +44,10 @@ source ~/.cargo/env
 cargo install --git https://github.com/YannickHerrero/miru
 ```
 
-#### Linux (Fedora)
+</details>
+
+<details>
+<summary><strong>Linux (Fedora)</strong></summary>
 
 ```bash
 # Install dependencies
@@ -57,7 +61,10 @@ source ~/.cargo/env
 cargo install --git https://github.com/YannickHerrero/miru
 ```
 
-#### Linux (Arch)
+</details>
+
+<details>
+<summary><strong>Linux (Arch)</strong></summary>
 
 ```bash
 # Install dependencies
@@ -71,7 +78,10 @@ source ~/.cargo/env
 cargo install --git https://github.com/YannickHerrero/miru
 ```
 
-#### macOS
+</details>
+
+<details>
+<summary><strong>macOS</strong></summary>
 
 ```bash
 # Install Xcode Command Line Tools (includes C compiler)
@@ -88,7 +98,10 @@ source ~/.cargo/env
 cargo install --git https://github.com/YannickHerrero/miru
 ```
 
-#### Windows
+</details>
+
+<details>
+<summary><strong>Windows</strong></summary>
 
 1. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "C++ build tools" workload
 2. Install [Rust](https://rustup.rs/)
@@ -98,7 +111,10 @@ cargo install --git https://github.com/YannickHerrero/miru
    cargo install --git https://github.com/YannickHerrero/miru
    ```
 
-#### Windows (WSL)
+</details>
+
+<details>
+<summary><strong>Windows (WSL)</strong></summary>
 
 Miru runs in WSL but can use Windows-native mpv for video playback, avoiding the need for X11/WSLg setup.
 
@@ -123,7 +139,10 @@ miru config --set player_command=/mnt/c/Users/<YourUsername>/AppData/Local/Micro
 
 Common mpv paths: Scoop (`scoop/shims/mpv.exe`), Chocolatey (`ProgramData/chocolatey/bin/mpv.exe`).
 
-#### iOS (iSH)
+</details>
+
+<details>
+<summary><strong>iOS (iSH)</strong></summary>
 
 Miru can run on iOS using the [iSH](https://ish.app/) terminal emulator app. Since iOS doesn't allow direct process launching, miru displays a clickable VLC link that opens the stream in the [VLC for iOS](https://apps.apple.com/app/vlc-for-mobile/id650377962) app.
 
@@ -163,6 +182,8 @@ export MIRU_IOS_MODE=1
 # [player]
 # ios_mode = "true"
 ```
+
+</details>
 
 ## Quick Start
 
