@@ -153,6 +153,32 @@ Miru can run on iOS using the [iSH](https://ish.app/) terminal emulator app. Sin
 
 **Installation in iSH:**
 
+**Option 1: Download pre-built binary (Recommended)**
+
+Download the pre-built static binary from GitHub releases:
+
+```bash
+# Download the latest binary
+wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-x86_64-linux-musl -O miru
+
+# Make it executable
+chmod +x miru
+
+# Move to a directory in PATH
+mv miru /usr/local/bin/
+```
+
+Optionally, verify the download with the checksum:
+
+```bash
+wget https://github.com/YannickHerrero/miru/releases/latest/download/miru-x86_64-linux-musl.sha256
+sha256sum -c miru-x86_64-linux-musl.sha256
+```
+
+**Option 2: Build from source**
+
+Building from source in iSH is possible but very slow (several hours):
+
 ```bash
 # Install dependencies
 apk add build-base pkgconfig
@@ -160,11 +186,9 @@ apk add build-base pkgconfig
 # Install Rust
 apk add rust cargo
 
-# Install miru
+# Install miru (this may take several hours)
 cargo install --git https://github.com/YannickHerrero/miru
 ```
-
-**Note:** Building from source in iSH may take a long time due to iOS device limitations. Consider cross-compiling for Alpine Linux x86 on a faster machine.
 
 **Usage:**
 1. Run `miru` and search for content
