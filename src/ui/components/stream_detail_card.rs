@@ -72,7 +72,16 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
 
 impl StreamDetailCard {
     /// Render the detail card for a stream
-    pub fn render(frame: &mut Frame, area: Rect, stream: &Stream, theme: &Theme) {
+    ///
+    /// `score` and `is_recommended` provide scoring information for display.
+    pub fn render(
+        frame: &mut Frame,
+        area: Rect,
+        stream: &Stream,
+        theme: &Theme,
+        score: Option<f64>,
+        is_recommended: bool,
+    ) {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(theme.border())
@@ -88,10 +97,23 @@ impl StreamDetailCard {
         let mut lines: Vec<Line> = Vec::new();
 
         // Provider header
-        lines.push(Line::from(Span::styled(
+        let mut header_spans = vec![Span::styled(
             format!("[{}]", stream.provider),
             theme.highlight(),
-        )));
+        )];
+        if is_recommended {
+            header_spans.push(Span::styled("  ", theme.normal()));
+            header_spans.push(Span::styled("[★ Recommended]", theme.success()));
+        }
+        lines.push(Line::from(header_spans));
+
+        // Score display
+        if let Some(score) = score {
+            lines.push(Line::from(vec![
+                Span::styled("Score: ", theme.muted()),
+                Span::styled(format!("{:.0}", score), theme.normal()),
+            ]));
+        }
 
         lines.push(Line::from("")); // Spacer
 

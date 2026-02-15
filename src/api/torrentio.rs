@@ -151,13 +151,10 @@ impl TorrentioClient {
             .await
             .map_err(|e| ApiError::Torrentio(format!("Failed to parse response: {}", e)))?;
 
-        let mut streams: Vec<Stream> = data.streams.into_iter().map(Stream::from).collect();
+        let streams: Vec<Stream> = data.streams.into_iter().map(Stream::from).collect();
 
-        // Sort by quality (descending), then by size (ascending)
-        streams.sort_by(|a, b| match b.quality_rank().cmp(&a.quality_rank()) {
-            std::cmp::Ordering::Equal => a.size_bytes.cmp(&b.size_bytes),
-            other => other,
-        });
+        // Sorting is handled by the caller using source_scoring::sort_streams_by_score()
+        // to allow scoring based on media context (type, anime, etc.)
 
         Ok(streams)
     }
@@ -188,13 +185,10 @@ impl TorrentioClient {
             .await
             .map_err(|e| ApiError::Torrentio(format!("Failed to parse response: {}", e)))?;
 
-        let mut streams: Vec<Stream> = data.streams.into_iter().map(Stream::from).collect();
+        let streams: Vec<Stream> = data.streams.into_iter().map(Stream::from).collect();
 
-        // Sort by quality (descending), then by size (ascending)
-        streams.sort_by(|a, b| match b.quality_rank().cmp(&a.quality_rank()) {
-            std::cmp::Ordering::Equal => a.size_bytes.cmp(&b.size_bytes),
-            other => other,
-        });
+        // Sorting is handled by the caller using source_scoring::sort_streams_by_score()
+        // to allow scoring based on media context (type, anime, etc.)
 
         Ok(streams)
     }
@@ -222,6 +216,8 @@ struct StreamResponse {
 pub struct Stream {
     /// Provider name (e.g., "nyaasi", "1337x")
     pub provider: String,
+    /// Raw title from torrentio response (used for trailer detection and scoring)
+    pub title: String,
     /// Quality (e.g., "1080p", "720p")
     pub quality: Option<String>,
     /// File size as string (e.g., "1.2 GB")
@@ -363,6 +359,7 @@ impl From<StreamResponse> for Stream {
 
         Self {
             provider,
+            title: resp.title.clone(),
             quality,
             size,
             size_bytes,
@@ -499,6 +496,7 @@ mod tests {
     fn make_test_stream(quality: Option<&str>) -> Stream {
         Stream {
             provider: "test".to_string(),
+            title: String::new(),
             quality: quality.map(String::from),
             size: None,
             size_bytes: 0,

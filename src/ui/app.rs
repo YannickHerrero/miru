@@ -15,7 +15,7 @@ use ratatui::{
 };
 use tokio::sync::RwLock;
 
-use crate::api::{Media, MediaType, Season, Stream, TmdbClient, TorrentioClient};
+use crate::api::{Media, MediaType, Season, ScoringOptions, Stream, TmdbClient, TorrentioClient, sort_streams_by_score, get_recommended_indices, pin_recommended_to_top};
 use crate::config::{save_config, Config};
 use crate::error::Result;
 use crate::history::{WatchHistory, WatchedItem};
@@ -755,7 +755,24 @@ impl App {
         };
 
         match streams_result {
-            Ok(streams) => {
+            Ok(mut streams) => {
+                // Detect anime from genres
+                let is_anime = media.genres.iter().any(|g| g.eq_ignore_ascii_case("animation"));
+
+                // Build scoring options from media context
+                let scoring_options = ScoringOptions {
+                    media_type: media.media_type,
+                    is_anime,
+                };
+
+                // Sort streams by score
+                sort_streams_by_score(&mut streams, &scoring_options);
+
+                // Get recommended source indices (top 2) and pin to top
+                let recommended = get_recommended_indices(&streams, &scoring_options, 2);
+                let recommended_count = recommended.len();
+                let streams = pin_recommended_to_top(streams, &recommended);
+
                 // Always show sources screen, even if empty
                 let title = media.display_title().to_string();
                 let ep_num = if media.media_type == MediaType::Movie {
@@ -769,6 +786,7 @@ impl App {
                     streams,
                     context,
                     show_uncached,
+                    recommended_count,
                 ));
             }
             Err(e) => {
@@ -799,7 +817,24 @@ impl App {
         };
 
         match streams_result {
-            Ok(streams) => {
+            Ok(mut streams) => {
+                // Detect anime from genres
+                let is_anime = context.media.genres.iter().any(|g| g.eq_ignore_ascii_case("animation"));
+
+                // Build scoring options from media context
+                let scoring_options = ScoringOptions {
+                    media_type: context.media.media_type,
+                    is_anime,
+                };
+
+                // Sort streams by score
+                sort_streams_by_score(&mut streams, &scoring_options);
+
+                // Get recommended source indices (top 2) and pin to top
+                let recommended = get_recommended_indices(&streams, &scoring_options, 2);
+                let recommended_count = recommended.len();
+                let streams = pin_recommended_to_top(streams, &recommended);
+
                 let title = context.media.display_title().to_string();
                 let ep_num = if context.media.media_type == MediaType::Movie {
                     0
@@ -812,6 +847,7 @@ impl App {
                     streams,
                     context,
                     show_uncached,
+                    recommended_count,
                 ));
             }
             Err(e) => {

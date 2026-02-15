@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::api::{Media, Stream};
+use crate::api::{calculate_source_score, Media, ScoringOptions, Stream};
 use crate::ui::components::{SelectableList, StreamDetailCard};
 use crate::ui::theme::Theme;
 
@@ -38,6 +38,8 @@ pub struct SourcesScreen {
     pub show_uncached: bool,
     /// Context for re-fetching sources when toggling
     pub context: SourcesContext,
+    /// Number of recommended sources pinned to the top of the list
+    pub recommended_count: usize,
 }
 
 impl SourcesScreen {
@@ -47,6 +49,7 @@ impl SourcesScreen {
         sources: Vec<Stream>,
         context: SourcesContext,
         show_uncached: bool,
+        recommended_count: usize,
     ) -> Self {
         Self {
             title,
@@ -58,6 +61,7 @@ impl SourcesScreen {
             list: SelectableList::new(sources),
             show_uncached,
             context,
+            recommended_count,
         }
     }
 
@@ -136,7 +140,26 @@ impl SourcesScreen {
 
             // Render the detail card for the selected item
             if let Some(stream) = self.list.get_selected() {
-                StreamDetailCard::render(frame, content_chunks[1], stream, theme);
+                let is_anime = self
+                    .context
+                    .media
+                    .genres
+                    .iter()
+                    .any(|g| g.eq_ignore_ascii_case("animation"));
+                let scoring_options = ScoringOptions {
+                    media_type: self.context.media.media_type,
+                    is_anime,
+                };
+                let score = calculate_source_score(stream, &scoring_options);
+                let is_recommended = self.list.selected < self.recommended_count;
+                StreamDetailCard::render(
+                    frame,
+                    content_chunks[1],
+                    stream,
+                    theme,
+                    Some(score),
+                    is_recommended,
+                );
             }
         } else {
             // Single column layout - just the list
@@ -199,12 +222,13 @@ impl SourcesScreen {
 
     /// Render the sources list
     fn render_list(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        self.list.render(
+        let recommended_count = self.recommended_count;
+        self.list.render_with_index(
             frame,
             area,
             " Select Source ",
             theme,
-            |source, is_selected| {
+            |source, is_selected, index| {
                 let style = if is_selected {
                     theme.selected()
                 } else {
@@ -213,6 +237,11 @@ impl SourcesScreen {
                 let muted = theme.muted();
 
                 let mut spans = vec![];
+
+                // Show recommended indicator for pinned sources
+                if index < recommended_count {
+                    spans.push(Span::styled("[★] ", theme.success()));
+                }
 
                 // Show uncached indicator
                 if !source.is_cached {

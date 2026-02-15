@@ -109,6 +109,49 @@ impl<T> SelectableList<T> {
 
         frame.render_stateful_widget(list, area, &mut self.state);
     }
+
+    /// Render the list with a custom item renderer that also receives the item index
+    pub fn render_with_index<F>(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        title: &str,
+        theme: &Theme,
+        render_item: F,
+    ) where
+        F: Fn(&T, bool, usize) -> Vec<Span<'static>>,
+    {
+        let items: Vec<ListItem> = self
+            .items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                let is_selected = i == self.selected;
+                let spans = render_item(item, is_selected, i);
+
+                // Add selection arrow
+                let mut content_spans = if is_selected {
+                    vec![Span::styled(format!("{} ", ARROW), theme.selected())]
+                } else {
+                    vec![Span::raw("  ")]
+                };
+                content_spans.extend(spans);
+
+                ListItem::new(Line::from(content_spans))
+            })
+            .collect();
+
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(theme.border())
+                    .title(title),
+            )
+            .highlight_style(theme.selected());
+
+        frame.render_stateful_widget(list, area, &mut self.state);
+    }
 }
 
 impl<T> Default for SelectableList<T> {
