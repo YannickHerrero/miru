@@ -55,6 +55,16 @@ impl EpisodesScreen {
         }
     }
 
+    /// Create episode screen with pre-fetched episodes (with full metadata)
+    pub fn with_episodes(media: Media, season: Option<Season>, episodes: Vec<Episode>) -> Self {
+        Self {
+            list: SelectableList::new(episodes),
+            media,
+            season,
+            watched_episodes: HashSet::new(),
+        }
+    }
+
     /// Set watched episodes
     pub fn set_watched_episodes(&mut self, watched: HashSet<u32>) {
         self.watched_episodes = watched;
@@ -180,8 +190,15 @@ impl EpisodesScreen {
             // Render the list
             self.render_list(frame, content_chunks[0], theme);
 
-            // Render the detail card for the show
-            DetailCard::render(frame, content_chunks[1], &self.media, theme);
+            // Render the detail card with episode info above show info
+            let selected_episode = self.list.get_selected();
+            DetailCard::render_with_episode(
+                frame,
+                content_chunks[1],
+                &self.media,
+                selected_episode,
+                theme,
+            );
         } else {
             // Single column layout - just the list
             self.render_list(frame, chunks[1], theme);

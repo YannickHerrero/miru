@@ -82,6 +82,10 @@ impl Media {
                 .map(|(i, title)| Episode {
                     number: i as u32 + 1,
                     title: title.clone(),
+                    air_date: None,
+                    overview: None,
+                    runtime: None,
+                    vote_average: None,
                 })
                 .collect()
         } else {
@@ -89,6 +93,10 @@ impl Media {
                 .map(|n| Episode {
                     number: n as u32,
                     title: format!("Episode {}", n),
+                    air_date: None,
+                    overview: None,
+                    runtime: None,
+                    vote_average: None,
                 })
                 .collect()
         }
@@ -100,6 +108,14 @@ impl Media {
 pub struct Episode {
     pub number: u32,
     pub title: String,
+    /// Air date (e.g., "2024-01-15")
+    pub air_date: Option<String>,
+    /// Episode synopsis/overview
+    pub overview: Option<String>,
+    /// Runtime in minutes
+    pub runtime: Option<u32>,
+    /// Episode rating (0.0-10.0)
+    pub vote_average: Option<f32>,
 }
 
 /// Season data structure (for TV shows)
@@ -110,12 +126,16 @@ pub struct Season {
 }
 
 impl Season {
-    /// Get episode list for this season
+    /// Get episode list for this season (basic, without metadata)
     pub fn get_episodes(&self) -> Vec<Episode> {
         (1..=self.episode_count)
             .map(|n| Episode {
                 number: n,
                 title: format!("Episode {}", n),
+                air_date: None,
+                overview: None,
+                runtime: None,
+                vote_average: None,
             })
             .collect()
     }

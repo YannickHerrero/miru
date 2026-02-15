@@ -778,11 +778,33 @@ impl App {
                 } else if seasons.len() == 1 {
                     // Only one season, skip to episodes
                     let season = seasons.into_iter().next().unwrap();
-                    let watched =
-                        self.get_watched_episodes_for_season(media.tmdb_id(), season.number);
-                    let mut screen = EpisodesScreen::with_season(media, season);
-                    screen.set_watched_episodes(watched);
-                    self.screen = Screen::Episodes(screen);
+                    // Fetch detailed episode metadata
+                    match self
+                        .tmdb
+                        .get_season_episodes(media.tmdb_id(), season.number)
+                        .await
+                    {
+                        Ok(episodes) => {
+                            let watched = self.get_watched_episodes_for_season(
+                                media.tmdb_id(),
+                                season.number,
+                            );
+                            let mut screen =
+                                EpisodesScreen::with_episodes(media, Some(season), episodes);
+                            screen.set_watched_episodes(watched);
+                            self.screen = Screen::Episodes(screen);
+                        }
+                        Err(_) => {
+                            // Fallback to basic episode list
+                            let watched = self.get_watched_episodes_for_season(
+                                media.tmdb_id(),
+                                season.number,
+                            );
+                            let mut screen = EpisodesScreen::with_season(media, season);
+                            screen.set_watched_episodes(watched);
+                            self.screen = Screen::Episodes(screen);
+                        }
+                    }
                 } else {
                     let watched_counts =
                         self.get_watched_counts_by_season(media.tmdb_id(), &seasons);
@@ -799,17 +821,25 @@ impl App {
 
     /// Fetch episodes for TV show season
     async fn handle_fetch_episodes(&mut self, media: Media, season: Option<Season>) {
-        match season {
-            Some(s) => {
-                let watched = self.get_watched_episodes_for_season(media.tmdb_id(), s.number);
-                let mut screen = EpisodesScreen::with_season(media, s);
+        let tmdb_id = media.tmdb_id();
+        let season_number = season.as_ref().map(|s| s.number).unwrap_or(1);
+
+        // Try to fetch detailed episode metadata from TMDB
+        match self.tmdb.get_season_episodes(tmdb_id, season_number).await {
+            Ok(episodes) => {
+                let watched = self.get_watched_episodes_for_season(tmdb_id, season_number);
+                let mut screen =
+                    EpisodesScreen::with_episodes(media, season, episodes);
                 screen.set_watched_episodes(watched);
                 self.screen = Screen::Episodes(screen);
             }
-            None => {
-                // For anime without seasons, use season 1
-                let watched = self.get_watched_episodes_for_season(media.tmdb_id(), 1);
-                let mut screen = EpisodesScreen::new(media);
+            Err(_) => {
+                // Fallback to basic episode list without metadata
+                let watched = self.get_watched_episodes_for_season(tmdb_id, season_number);
+                let mut screen = match season {
+                    Some(s) => EpisodesScreen::with_season(media, s),
+                    None => EpisodesScreen::new(media),
+                };
                 screen.set_watched_episodes(watched);
                 self.screen = Screen::Episodes(screen);
             }

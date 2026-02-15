@@ -1,7 +1,7 @@
 use reqwest::Client;
 use serde::Deserialize;
 
-use crate::api::media::{Media, MediaSource, MediaType, Season};
+use crate::api::media::{Episode, Media, MediaSource, MediaType, Season};
 use crate::error::ApiError;
 
 const TMDB_API_URL: &str = "https://api.themoviedb.org/3";
@@ -207,6 +207,46 @@ impl TmdbClient {
             .collect())
     }
 
+    /// Get episodes for a specific season with full metadata
+    pub async fn get_season_episodes(
+        &self,
+        tv_id: i32,
+        season_number: u32,
+    ) -> Result<Vec<Episode>, ApiError> {
+        let url = format!(
+            "{}/tv/{}/season/{}?api_key={}",
+            TMDB_API_URL, tv_id, season_number, self.api_key
+        );
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(ApiError::Tmdb(format!("HTTP {}", response.status())));
+        }
+
+        let data: SeasonDetailResponse = response
+            .json()
+            .await
+            .map_err(|e| ApiError::Tmdb(format!("Failed to parse season response: {}", e)))?;
+
+        Ok(data
+            .episodes
+            .into_iter()
+            .map(|ep| Episode {
+                number: ep.episode_number,
+                title: if ep.name.is_empty() {
+                    format!("Episode {}", ep.episode_number)
+                } else {
+                    ep.name
+                },
+                air_date: ep.air_date,
+                overview: ep.overview.filter(|o| !o.is_empty()),
+                runtime: ep.runtime,
+                vote_average: ep.vote_average.filter(|&v| v > 0.0),
+            })
+            .collect())
+    }
+
     /// Get movie details by ID
     pub async fn get_movie_details(&self, movie_id: i32) -> Result<Media, ApiError> {
         let url = format!(
@@ -341,6 +381,25 @@ struct GenreInfo {
 struct SeasonInfo {
     season_number: u32,
     episode_count: u32,
+}
+
+/// Response from TMDB /tv/{id}/season/{season_number} endpoint
+#[derive(Debug, Deserialize)]
+struct SeasonDetailResponse {
+    #[serde(default)]
+    episodes: Vec<EpisodeInfo>,
+}
+
+/// Per-episode info from TMDB season detail endpoint
+#[derive(Debug, Deserialize)]
+struct EpisodeInfo {
+    episode_number: u32,
+    #[serde(default)]
+    name: String,
+    air_date: Option<String>,
+    overview: Option<String>,
+    runtime: Option<u32>,
+    vote_average: Option<f32>,
 }
 
 // Conversion implementations

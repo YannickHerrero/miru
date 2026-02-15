@@ -5,7 +5,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::api::{Media, MediaType};
+use crate::api::{Episode, Media, MediaType};
 use crate::ui::theme::{Theme, STAR};
 
 /// Detail card component for displaying media information
@@ -14,6 +14,17 @@ pub struct DetailCard;
 impl DetailCard {
     /// Render the detail card for a media item
     pub fn render(frame: &mut Frame, area: Rect, media: &Media, theme: &Theme) {
+        Self::render_with_episode(frame, area, media, None, theme);
+    }
+
+    /// Render the detail card for a media item with optional episode details
+    pub fn render_with_episode(
+        frame: &mut Frame,
+        area: Rect,
+        media: &Media,
+        episode: Option<&Episode>,
+        theme: &Theme,
+    ) {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(theme.border())
@@ -27,10 +38,89 @@ impl DetailCard {
         }
 
         let mut lines: Vec<Line> = Vec::new();
+        let width = inner.width as usize;
+
+        // Episode-specific info (shown above show info when an episode is selected)
+        if let Some(ep) = episode {
+            // Episode title
+            let ep_title = format!("{}. {}", ep.number, ep.title);
+            lines.push(Line::from(Span::styled(
+                truncate_str(&ep_title, width),
+                theme.highlight(),
+            )));
+
+            // Episode metadata line: air date, runtime, rating
+            let mut ep_meta: Vec<Span> = Vec::new();
+
+            if let Some(ref air_date) = ep.air_date {
+                ep_meta.push(Span::styled(format_air_date(air_date), theme.normal()));
+            }
+
+            if let Some(runtime) = ep.runtime {
+                if !ep_meta.is_empty() {
+                    ep_meta.push(Span::styled("  ", theme.normal()));
+                }
+                ep_meta.push(Span::styled(format!("{} min", runtime), theme.muted()));
+            }
+
+            if let Some(score) = ep.vote_average {
+                if !ep_meta.is_empty() {
+                    ep_meta.push(Span::styled("  ", theme.normal()));
+                }
+                ep_meta.push(Span::styled(
+                    format!("{} {:.1}", STAR, score),
+                    theme.warning(),
+                ));
+            }
+
+            if !ep_meta.is_empty() {
+                lines.push(Line::from(ep_meta));
+            }
+
+            // Episode overview/synopsis
+            if let Some(ref overview) = ep.overview {
+                if !overview.is_empty() {
+                    lines.push(Line::from("")); // Spacer
+
+                    // Reserve space for show info below (title + type/status + year/score + genres = ~6 lines)
+                    let reserved_for_show = 7;
+                    let used_lines = lines.len();
+                    let available_height = inner
+                        .height
+                        .saturating_sub(used_lines as u16 + reserved_for_show + 1);
+
+                    if available_height > 0 {
+                        let wrapped = wrap_text(overview, width);
+                        let max_lines = available_height as usize;
+
+                        for (i, line) in wrapped.iter().enumerate() {
+                            if i >= max_lines {
+                                if let Some(last) = lines.last_mut() {
+                                    *last = Line::from(Span::styled(
+                                        truncate_str(&format!("{}...", line), width),
+                                        theme.normal(),
+                                    ));
+                                }
+                                break;
+                            }
+                            lines.push(Line::from(Span::styled(line.clone(), theme.normal())));
+                        }
+                    }
+                }
+            }
+
+            // Separator between episode and show info
+            lines.push(Line::from("")); // Spacer
+            let separator = "─".repeat(width.min(40));
+            lines.push(Line::from(Span::styled(separator, theme.muted())));
+            lines.push(Line::from("")); // Spacer
+        }
+
+        // Show-level info (always shown)
 
         // Title
         lines.push(Line::from(Span::styled(
-            truncate_str(&media.title, inner.width as usize),
+            truncate_str(&media.title, width),
             theme.highlight(),
         )));
 
@@ -38,7 +128,7 @@ impl DetailCard {
         if let Some(ref original) = media.title_original {
             if original != &media.title {
                 lines.push(Line::from(Span::styled(
-                    truncate_str(original, inner.width as usize),
+                    truncate_str(original, width),
                     theme.muted(),
                 )));
             }
@@ -117,37 +207,39 @@ impl DetailCard {
             lines.push(Line::from("")); // Spacer
             let genres_str = media.genres.join(", ");
             lines.push(Line::from(Span::styled(
-                truncate_str(&genres_str, inner.width as usize),
+                truncate_str(&genres_str, width),
                 theme.muted(),
             )));
         }
 
-        // Description
-        if let Some(ref desc) = media.description {
-            if !desc.is_empty() {
-                lines.push(Line::from("")); // Spacer
+        // Description (only show when no episode is selected, to save space)
+        if episode.is_none() {
+            if let Some(ref desc) = media.description {
+                if !desc.is_empty() {
+                    lines.push(Line::from("")); // Spacer
 
-                // Calculate available height for description
-                let used_lines = lines.len();
-                let available_height = inner.height.saturating_sub(used_lines as u16 + 1);
+                    // Calculate available height for description
+                    let used_lines = lines.len();
+                    let available_height = inner.height.saturating_sub(used_lines as u16 + 1);
 
-                if available_height > 0 {
-                    // Wrap text to fit width
-                    let wrapped = wrap_text(desc, inner.width as usize);
-                    let max_lines = available_height as usize;
+                    if available_height > 0 {
+                        // Wrap text to fit width
+                        let wrapped = wrap_text(desc, width);
+                        let max_lines = available_height as usize;
 
-                    for (i, line) in wrapped.iter().enumerate() {
-                        if i >= max_lines {
-                            // Add ellipsis to last line if truncated
-                            if let Some(last) = lines.last_mut() {
-                                *last = Line::from(Span::styled(
-                                    truncate_str(&format!("{}...", line), inner.width as usize),
-                                    theme.normal(),
-                                ));
+                        for (i, line) in wrapped.iter().enumerate() {
+                            if i >= max_lines {
+                                // Add ellipsis to last line if truncated
+                                if let Some(last) = lines.last_mut() {
+                                    *last = Line::from(Span::styled(
+                                        truncate_str(&format!("{}...", line), width),
+                                        theme.normal(),
+                                    ));
+                                }
+                                break;
                             }
-                            break;
+                            lines.push(Line::from(Span::styled(line.clone(), theme.normal())));
                         }
-                        lines.push(Line::from(Span::styled(line.clone(), theme.normal())));
                     }
                 }
             }
@@ -212,4 +304,31 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
     }
 
     lines
+}
+
+/// Format an air date string from "YYYY-MM-DD" to a more readable format
+fn format_air_date(date: &str) -> String {
+    let parts: Vec<&str> = date.split('-').collect();
+    if parts.len() == 3 {
+        let month = match parts[1] {
+            "01" => "Jan",
+            "02" => "Feb",
+            "03" => "Mar",
+            "04" => "Apr",
+            "05" => "May",
+            "06" => "Jun",
+            "07" => "Jul",
+            "08" => "Aug",
+            "09" => "Sep",
+            "10" => "Oct",
+            "11" => "Nov",
+            "12" => "Dec",
+            _ => parts[1],
+        };
+        // Remove leading zero from day
+        let day = parts[2].trim_start_matches('0');
+        format!("{} {} {}", month, day, parts[0])
+    } else {
+        date.to_string()
+    }
 }
