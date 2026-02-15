@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 use crate::api::{Media, MediaType, Season, ScoringOptions, Stream, TmdbClient, TorrentioClient, sort_streams_by_score, get_recommended_indices, pin_recommended_to_top};
 use crate::config::{save_config, Config};
 use crate::error::Result;
-use crate::history::{WatchHistory, WatchedItem};
+use crate::history::{WatchHistory, WatchedItem, WatchlistItem};
 use crate::player::Player;
 use crate::streaming::TorrentStreamer;
 use crate::ui::components::Spinner;
@@ -62,6 +62,8 @@ enum PendingOperation {
     StartP2PStream(Stream),
     /// Select an item from watch history
     SelectHistoryItem(WatchedItem),
+    /// Select an item from the watchlist
+    SelectWatchlistItem(WatchlistItem),
 }
 
 /// Context for tracking what's currently being played
@@ -120,17 +122,25 @@ impl App {
         // Open watch history database
         let history = WatchHistory::open().ok();
 
-        // Load initial history
+        // Load initial history and watchlist
         let recent_history = history
             .as_ref()
             .map(|h| h.get_recent_media(10))
             .unwrap_or_default();
 
+        let watchlist = history
+            .as_ref()
+            .map(|h| h.get_watchlist(20))
+            .unwrap_or_default();
+
         // Parse theme variant from config
         let theme_variant = ThemeVariant::from_config_string(&config.ui.theme);
 
+        let mut search_screen = SearchScreen::new_with_history(recent_history);
+        search_screen.set_watchlist(watchlist);
+
         Self {
-            screen: Screen::Search(SearchScreen::new_with_history(recent_history)),
+            screen: Screen::Search(search_screen),
             pending: PendingOperation::None,
             should_quit: false,
             tmdb,
@@ -167,6 +177,22 @@ impl App {
         self.history
             .as_ref()
             .map(|h| h.get_recent_media(10))
+            .unwrap_or_default()
+    }
+
+    /// Get watchlist items
+    pub fn get_watchlist(&self) -> Vec<WatchlistItem> {
+        self.history
+            .as_ref()
+            .map(|h| h.get_watchlist(20))
+            .unwrap_or_default()
+    }
+
+    /// Get watchlist IDs as a HashSet for quick lookup
+    pub fn get_watchlist_ids(&self) -> std::collections::HashSet<(i32, MediaType)> {
+        self.history
+            .as_ref()
+            .map(|h| h.get_watchlist_ids())
             .unwrap_or_default()
     }
 
@@ -209,9 +235,11 @@ impl App {
         }
     }
 
-    /// Create a new search screen with current history
+    /// Create a new search screen with current history and watchlist
     fn new_search_screen(&self) -> SearchScreen {
-        SearchScreen::new_with_history(self.get_recent_history())
+        let mut screen = SearchScreen::new_with_history(self.get_recent_history());
+        screen.set_watchlist(self.get_watchlist());
+        screen
     }
 
     /// Get watched episodes for a specific season of a show
@@ -361,6 +389,18 @@ impl App {
                             self.pending = PendingOperation::SelectHistoryItem(item);
                             self.screen = Screen::Loading(Spinner::new("Loading..."));
                         }
+                        SearchAction::SelectWatchlist(item) => {
+                            self.pending = PendingOperation::SelectWatchlistItem(item);
+                            self.screen = Screen::Loading(Spinner::new("Loading..."));
+                        }
+                        SearchAction::RemoveFromWatchlist(item) => {
+                            if let Some(history) = &self.history {
+                                let _ = history.remove_from_watchlist(
+                                    item.tmdb_id,
+                                    item.media_type,
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -371,12 +411,32 @@ impl App {
                             self.pending = PendingOperation::SelectMedia(media);
                             self.screen = Screen::Loading(Spinner::new("Loading..."));
                         }
+                        ResultsAction::ToggleWatchlist(media) => {
+                            let tmdb_id = media.tmdb_id();
+                            let media_type = media.media_type;
+                            if let Some(history) = &self.history {
+                                if screen.is_in_watchlist(tmdb_id, media_type) {
+                                    let _ = history.remove_from_watchlist(tmdb_id, media_type);
+                                } else {
+                                    let _ = history.add_to_watchlist(
+                                        tmdb_id,
+                                        media_type,
+                                        &media.title,
+                                        media.cover_image.as_deref(),
+                                    );
+                                }
+                            }
+                            // Toggle local state
+                            screen.toggle_watchlist(tmdb_id, media_type);
+                        }
                         ResultsAction::Back => {
                             let query = screen.query.clone();
                             let history = self.get_recent_history();
-                            self.screen = Screen::Search(SearchScreen::with_query_and_history(
+                            let mut search_screen = SearchScreen::with_query_and_history(
                                 &query, history,
-                            ));
+                            );
+                            search_screen.set_watchlist(self.get_watchlist());
+                            self.screen = Screen::Search(search_screen);
                         }
                         ResultsAction::Search => {
                             self.screen = Screen::Search(self.new_search_screen());
@@ -557,6 +617,10 @@ impl App {
             PendingOperation::SelectHistoryItem(item) => {
                 self.handle_select_history_item(item).await;
             }
+
+            PendingOperation::SelectWatchlistItem(item) => {
+                self.handle_select_watchlist_item(item).await;
+            }
         }
     }
 
@@ -616,6 +680,39 @@ impl App {
         }
     }
 
+    /// Handle selecting an item from the watchlist
+    async fn handle_select_watchlist_item(&mut self, item: WatchlistItem) {
+        // Fetch media details from TMDB (same logic as history item)
+        let result = match item.media_type {
+            MediaType::Movie => self.tmdb.get_movie_details(item.tmdb_id).await,
+            MediaType::TvShow => self.tmdb.get_tv_show_details(item.tmdb_id).await,
+        };
+
+        match result {
+            Ok(media) => {
+                match media.media_type {
+                    MediaType::Movie => {
+                        self.pending = PendingOperation::FetchSources {
+                            media,
+                            season: 0,
+                            episode: 0,
+                            show_uncached: false,
+                        };
+                    }
+                    MediaType::TvShow => {
+                        self.pending = PendingOperation::FetchSeasons(media);
+                    }
+                }
+            }
+            Err(e) => {
+                self.screen = Screen::Error(ErrorScreen::new(
+                    format!("Failed to load media details: {}", e),
+                    true,
+                ));
+            }
+        }
+    }
+
     /// Search TMDB for movies and TV shows
     async fn handle_search(&mut self, query: &str) {
         match self.tmdb.search_all(query).await {
@@ -635,7 +732,11 @@ impl App {
                             .unwrap_or(std::cmp::Ordering::Equal)
                     });
 
-                    self.screen = Screen::Results(ResultsScreen::new(query.to_string(), results));
+                    let watchlist_ids = self.get_watchlist_ids();
+                    self.screen = Screen::Results(
+                        ResultsScreen::new(query.to_string(), results)
+                            .with_watchlist_ids(watchlist_ids),
+                    );
                 }
             }
             Err(e) => {
@@ -988,9 +1089,8 @@ impl App {
                 // Player finished, restore TUI
                 enable_raw_mode().ok();
                 execute!(io::stdout(), EnterAlternateScreen).ok();
-                // Return to search screen with updated history
-                self.screen =
-                    Screen::Search(SearchScreen::new_with_history(self.get_recent_history()));
+                // Return to search screen with updated history and watchlist
+                self.screen = Screen::Search(self.new_search_screen());
             }
             Err(e) => {
                 // Restore TUI even on error

@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::history::WatchedItem;
+use crate::history::{WatchedItem, WatchlistItem};
 use crate::ui::components::Input;
 use crate::ui::theme::Theme;
 
@@ -16,6 +16,10 @@ pub enum SearchAction {
     Search(String),
     /// Select item from history
     SelectHistory(WatchedItem),
+    /// Select item from watchlist
+    SelectWatchlist(WatchlistItem),
+    /// Remove item from watchlist
+    RemoveFromWatchlist(WatchlistItem),
 }
 
 /// Focus state for the search screen
@@ -23,9 +27,10 @@ pub enum SearchAction {
 enum Focus {
     Search,
     History,
+    Watchlist,
 }
 
-/// Search input screen with watch history
+/// Search input screen with watch history and watchlist
 pub struct SearchScreen {
     pub input: Input,
     /// Recent watch history
@@ -34,7 +39,13 @@ pub struct SearchScreen {
     history_selected: usize,
     /// History list state
     history_state: ListState,
-    /// Current focus (search bar or history)
+    /// Watchlist items
+    watchlist: Vec<WatchlistItem>,
+    /// Currently selected watchlist item
+    watchlist_selected: usize,
+    /// Watchlist list state
+    watchlist_state: ListState,
+    /// Current focus (search bar, history, or watchlist)
     focus: Focus,
 }
 
@@ -45,6 +56,9 @@ impl SearchScreen {
             history: Vec::new(),
             history_selected: 0,
             history_state: ListState::default(),
+            watchlist: Vec::new(),
+            watchlist_selected: 0,
+            watchlist_state: ListState::default(),
             focus: Focus::Search,
         }
     }
@@ -55,6 +69,9 @@ impl SearchScreen {
             history: Vec::new(),
             history_selected: 0,
             history_state: ListState::default(),
+            watchlist: Vec::new(),
+            watchlist_selected: 0,
+            watchlist_state: ListState::default(),
             focus: Focus::Search,
         }
     }
@@ -69,6 +86,9 @@ impl SearchScreen {
             history,
             history_selected: 0,
             history_state: state,
+            watchlist: Vec::new(),
+            watchlist_selected: 0,
+            watchlist_state: ListState::default(),
             focus: Focus::Search,
         }
     }
@@ -83,7 +103,21 @@ impl SearchScreen {
             history,
             history_selected: 0,
             history_state: state,
+            watchlist: Vec::new(),
+            watchlist_selected: 0,
+            watchlist_state: ListState::default(),
             focus: Focus::Search,
+        }
+    }
+
+    /// Set the watchlist items
+    pub fn set_watchlist(&mut self, watchlist: Vec<WatchlistItem>) {
+        self.watchlist = watchlist;
+        self.watchlist_selected = 0;
+        if !self.watchlist.is_empty() {
+            self.watchlist_state.select(Some(0));
+        } else {
+            self.watchlist_state.select(None);
         }
     }
 
@@ -99,11 +133,23 @@ impl SearchScreen {
         }
     }
 
+    /// Get the next available focus target when pressing Tab/Down from search
+    fn next_focus_from_search(&self) -> Option<Focus> {
+        if !self.history.is_empty() {
+            Some(Focus::History)
+        } else if !self.watchlist.is_empty() {
+            Some(Focus::Watchlist)
+        } else {
+            None
+        }
+    }
+
     /// Handle key input, returns Some(action) if an action should be performed
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<SearchAction> {
         match self.focus {
             Focus::Search => self.handle_search_key(key),
             Focus::History => self.handle_history_key(key),
+            Focus::Watchlist => self.handle_watchlist_key(key),
         }
     }
 
@@ -116,10 +162,18 @@ impl SearchScreen {
                 }
             }
             KeyCode::Down | KeyCode::Tab => {
-                // Move focus to history if available
-                if !self.history.is_empty() {
-                    self.focus = Focus::History;
-                    self.history_state.select(Some(self.history_selected));
+                // Move focus to the first available list
+                if let Some(next) = self.next_focus_from_search() {
+                    self.focus = next;
+                    match next {
+                        Focus::History => {
+                            self.history_state.select(Some(self.history_selected));
+                        }
+                        Focus::Watchlist => {
+                            self.watchlist_state.select(Some(self.watchlist_selected));
+                        }
+                        Focus::Search => {}
+                    }
                 }
             }
             KeyCode::Char(c) => {
@@ -171,7 +225,19 @@ impl SearchScreen {
                     self.history_state.select(Some(self.history_selected));
                 }
             }
-            KeyCode::Tab | KeyCode::Esc => {
+            KeyCode::Right | KeyCode::Tab => {
+                // Move to watchlist if available
+                if !self.watchlist.is_empty() {
+                    self.focus = Focus::Watchlist;
+                    self.history_state.select(None);
+                    self.watchlist_state.select(Some(self.watchlist_selected));
+                } else {
+                    // Tab back to search
+                    self.focus = Focus::Search;
+                    self.history_state.select(None);
+                }
+            }
+            KeyCode::Esc => {
                 // Move back to search
                 self.focus = Focus::Search;
                 self.history_state.select(None);
@@ -193,17 +259,92 @@ impl SearchScreen {
         None
     }
 
+    fn handle_watchlist_key(&mut self, key: KeyEvent) -> Option<SearchAction> {
+        match key.code {
+            KeyCode::Enter => {
+                if let Some(item) = self.watchlist.get(self.watchlist_selected) {
+                    return Some(SearchAction::SelectWatchlist(item.clone()));
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.watchlist_selected == 0 {
+                    // Move back to search
+                    self.focus = Focus::Search;
+                    self.watchlist_state.select(None);
+                } else {
+                    self.watchlist_selected = self.watchlist_selected.saturating_sub(1);
+                    self.watchlist_state.select(Some(self.watchlist_selected));
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.watchlist_selected < self.watchlist.len().saturating_sub(1) {
+                    self.watchlist_selected += 1;
+                    self.watchlist_state.select(Some(self.watchlist_selected));
+                }
+            }
+            KeyCode::Left | KeyCode::Tab => {
+                // Move to history if available, otherwise search
+                if !self.history.is_empty() {
+                    self.focus = Focus::History;
+                    self.watchlist_state.select(None);
+                    self.history_state.select(Some(self.history_selected));
+                } else {
+                    self.focus = Focus::Search;
+                    self.watchlist_state.select(None);
+                }
+            }
+            KeyCode::Char('d') | KeyCode::Char('x') => {
+                // Remove from watchlist
+                if let Some(item) = self.watchlist.get(self.watchlist_selected) {
+                    let item = item.clone();
+                    // Remove from local list
+                    self.watchlist.remove(self.watchlist_selected);
+                    if self.watchlist.is_empty() {
+                        self.watchlist_selected = 0;
+                        self.watchlist_state.select(None);
+                        // Move focus to history or search
+                        if !self.history.is_empty() {
+                            self.focus = Focus::History;
+                            self.history_state.select(Some(self.history_selected));
+                        } else {
+                            self.focus = Focus::Search;
+                        }
+                    } else if self.watchlist_selected >= self.watchlist.len() {
+                        self.watchlist_selected = self.watchlist.len() - 1;
+                        self.watchlist_state.select(Some(self.watchlist_selected));
+                    } else {
+                        self.watchlist_state.select(Some(self.watchlist_selected));
+                    }
+                    return Some(SearchAction::RemoveFromWatchlist(item));
+                }
+            }
+            KeyCode::Esc => {
+                self.focus = Focus::Search;
+                self.watchlist_state.select(None);
+            }
+            KeyCode::Backspace => {
+                self.focus = Focus::Search;
+                self.watchlist_state.select(None);
+                self.input.backspace();
+            }
+            _ => {}
+        }
+        None
+    }
+
     /// Render the search screen
     pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let has_history = !self.history.is_empty();
+        let has_watchlist = !self.watchlist.is_empty();
+        let has_lists = has_history || has_watchlist;
 
-        let constraints = if has_history {
+        let constraints = if has_lists {
             vec![
                 Constraint::Length(3), // Title
                 Constraint::Length(3), // Input
                 Constraint::Length(2), // Help text
                 Constraint::Length(1), // Spacer
-                Constraint::Min(5),    // History
+                Constraint::Min(5),    // Lists
             ]
         } else {
             vec![
@@ -235,17 +376,28 @@ impl SearchScreen {
             .render_with_style(frame, chunks[1], " Search ", theme, input_style);
 
         // Help text
-        let help = if has_history {
-            Line::from(vec![
+        let help = if has_lists {
+            let mut spans = vec![
                 Span::styled("Enter", theme.highlight()),
                 Span::styled(" search ", theme.muted()),
-                Span::styled("Tab/Down", theme.highlight()),
-                Span::styled(" history ", theme.muted()),
-                Span::styled("^T", theme.highlight()),
-                Span::styled(" theme ", theme.muted()),
-                Span::styled("Esc", theme.highlight()),
-                Span::styled(" quit", theme.muted()),
-            ])
+                Span::styled("Tab", theme.highlight()),
+            ];
+            if has_history && has_watchlist {
+                spans.push(Span::styled(" navigate lists ", theme.muted()));
+            } else if has_history {
+                spans.push(Span::styled(" history ", theme.muted()));
+            } else {
+                spans.push(Span::styled(" watchlist ", theme.muted()));
+            }
+            if has_watchlist {
+                spans.push(Span::styled("d", theme.highlight()));
+                spans.push(Span::styled(" remove ", theme.muted()));
+            }
+            spans.push(Span::styled("^T", theme.highlight()));
+            spans.push(Span::styled(" theme ", theme.muted()));
+            spans.push(Span::styled("Esc", theme.highlight()));
+            spans.push(Span::styled(" quit", theme.muted()));
+            Line::from(spans)
         } else {
             Line::from(vec![
                 Span::styled("Enter", theme.highlight()),
@@ -259,9 +411,24 @@ impl SearchScreen {
         let help_widget = Paragraph::new(help);
         frame.render_widget(help_widget, chunks[2]);
 
-        // History section
-        if has_history {
-            self.render_history(frame, chunks[4], theme);
+        // Lists section
+        if has_lists {
+            let list_area = chunks[4];
+
+            if has_history && has_watchlist {
+                // Side by side
+                let columns = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .split(list_area);
+
+                self.render_history(frame, columns[0], theme);
+                self.render_watchlist(frame, columns[1], theme);
+            } else if has_history {
+                self.render_history(frame, list_area, theme);
+            } else {
+                self.render_watchlist(frame, list_area, theme);
+            }
         }
     }
 
@@ -327,6 +494,64 @@ impl SearchScreen {
         );
 
         frame.render_stateful_widget(list, area, &mut self.history_state);
+    }
+
+    fn render_watchlist(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let items: Vec<ListItem> = self
+            .watchlist
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                let is_selected = self.focus == Focus::Watchlist && i == self.watchlist_selected;
+
+                let mut spans = vec![];
+
+                // Selection indicator
+                if is_selected {
+                    spans.push(Span::styled("> ", theme.selected()));
+                } else {
+                    spans.push(Span::raw("  "));
+                }
+
+                // Title
+                let title_style = if is_selected {
+                    theme.selected()
+                } else {
+                    theme.normal()
+                };
+                spans.push(Span::styled(&item.title, title_style));
+
+                // Media type badge
+                let type_badge = match item.media_type {
+                    crate::api::MediaType::Movie => " [Movie]",
+                    crate::api::MediaType::TvShow => " [TV]",
+                };
+                spans.push(Span::styled(type_badge, theme.muted()));
+
+                // Time added
+                spans.push(Span::styled(
+                    format!(" - {}", item.added_at_display()),
+                    theme.muted(),
+                ));
+
+                ListItem::new(Line::from(spans))
+            })
+            .collect();
+
+        let border_style = if self.focus == Focus::Watchlist {
+            theme.highlight()
+        } else {
+            theme.border()
+        };
+
+        let list = List::new(items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style)
+                .title(" Watchlist "),
+        );
+
+        frame.render_stateful_widget(list, area, &mut self.watchlist_state);
     }
 }
 

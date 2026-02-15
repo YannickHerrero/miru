@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -18,12 +20,16 @@ pub enum ResultsAction {
     Select(Media),
     Back,
     Search,
+    /// Toggle watchlist status for a media item
+    ToggleWatchlist(Media),
 }
 
 /// Search results screen for all media types
 pub struct ResultsScreen {
     pub query: String,
     pub list: SelectableList<Media>,
+    /// Set of (tmdb_id, media_type) pairs currently in the watchlist
+    watchlist_ids: HashSet<(i32, MediaType)>,
 }
 
 impl ResultsScreen {
@@ -31,7 +37,28 @@ impl ResultsScreen {
         Self {
             query,
             list: SelectableList::new(results),
+            watchlist_ids: HashSet::new(),
         }
+    }
+
+    pub fn with_watchlist_ids(mut self, ids: HashSet<(i32, MediaType)>) -> Self {
+        self.watchlist_ids = ids;
+        self
+    }
+
+    /// Toggle the watchlist status of a media item locally
+    pub fn toggle_watchlist(&mut self, tmdb_id: i32, media_type: MediaType) {
+        let key = (tmdb_id, media_type);
+        if self.watchlist_ids.contains(&key) {
+            self.watchlist_ids.remove(&key);
+        } else {
+            self.watchlist_ids.insert(key);
+        }
+    }
+
+    /// Check if a media item is in the watchlist
+    pub fn is_in_watchlist(&self, tmdb_id: i32, media_type: MediaType) -> bool {
+        self.watchlist_ids.contains(&(tmdb_id, media_type))
     }
 
     /// Handle key input
@@ -47,6 +74,11 @@ impl ResultsScreen {
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.list.next();
+            }
+            KeyCode::Char('a') => {
+                if let Some(media) = self.list.get_selected() {
+                    return Some(ResultsAction::ToggleWatchlist(media.clone()));
+                }
             }
             KeyCode::Esc => {
                 return Some(ResultsAction::Back);
@@ -114,11 +146,13 @@ impl ResultsScreen {
         // Help text
         let help = Line::from(vec![
             Span::styled("↑/↓", theme.highlight()),
-            Span::styled(" navigate • ", theme.muted()),
+            Span::styled(" navigate ", theme.muted()),
             Span::styled("Enter", theme.highlight()),
-            Span::styled(" select • ", theme.muted()),
+            Span::styled(" select ", theme.muted()),
+            Span::styled("a", theme.highlight()),
+            Span::styled(" watchlist ", theme.muted()),
             Span::styled("/", theme.highlight()),
-            Span::styled(" search • ", theme.muted()),
+            Span::styled(" search ", theme.muted()),
             Span::styled("Esc", theme.highlight()),
             Span::styled(" back", theme.muted()),
         ]);
@@ -128,6 +162,8 @@ impl ResultsScreen {
 
     /// Render the results list
     fn render_list(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let watchlist_ids = self.watchlist_ids.clone();
+
         self.list
             .render(frame, area, " Results ", theme, |media, is_selected| {
                 let style = if is_selected {
@@ -143,10 +179,19 @@ impl ResultsScreen {
                     MediaType::TvShow => theme.info(),
                 };
 
-                let mut spans = vec![
-                    Span::styled(format!("[{}] ", media.media_type.label()), type_style),
-                    Span::styled(media.display_title().to_string(), style),
-                ];
+                let mut spans = vec![];
+
+                // Watchlist indicator
+                let in_watchlist = watchlist_ids.contains(&(media.tmdb_id(), media.media_type));
+                if in_watchlist {
+                    spans.push(Span::styled("[+] ", theme.success()));
+                }
+
+                spans.push(Span::styled(
+                    format!("[{}] ", media.media_type.label()),
+                    type_style,
+                ));
+                spans.push(Span::styled(media.display_title().to_string(), style));
 
                 if let Some(score) = media.score {
                     if score > 0.0 {

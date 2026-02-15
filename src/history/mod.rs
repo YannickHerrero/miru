@@ -18,6 +18,43 @@ pub fn db_path() -> PathBuf {
         .join("history.db")
 }
 
+/// A watchlist item record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchlistItem {
+    /// Unique ID in database
+    pub id: i64,
+    /// TMDB ID of the media
+    pub tmdb_id: i32,
+    /// Type of media (Movie or TvShow)
+    pub media_type: MediaType,
+    /// Title of the media
+    pub title: String,
+    /// Cover image URL
+    pub cover_image: Option<String>,
+    /// When this was added to the watchlist
+    pub added_at: DateTime<Utc>,
+}
+
+impl WatchlistItem {
+    /// Get a display string for when this was added
+    pub fn added_at_display(&self) -> String {
+        let now = Utc::now();
+        let duration = now.signed_duration_since(self.added_at);
+
+        if duration.num_minutes() < 1 {
+            "Just now".to_string()
+        } else if duration.num_hours() < 1 {
+            format!("{}m ago", duration.num_minutes())
+        } else if duration.num_days() < 1 {
+            format!("{}h ago", duration.num_hours())
+        } else if duration.num_days() < 7 {
+            format!("{}d ago", duration.num_days())
+        } else {
+            self.added_at.format("%b %d").to_string()
+        }
+    }
+}
+
 /// A watched item record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatchedItem {
@@ -114,6 +151,25 @@ impl WatchHistory {
         // Index for fast recent queries
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_watched_at ON watched(watched_at DESC)",
+            [],
+        )?;
+
+        // Watchlist table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tmdb_id INTEGER NOT NULL,
+                media_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                cover_image TEXT,
+                added_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(tmdb_id, media_type)
+            )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_watchlist_added_at ON watchlist(added_at DESC)",
             [],
         )?;
 
@@ -277,6 +333,133 @@ impl WatchHistory {
         rows.filter_map(|r| r.ok()).collect()
     }
 
+    /// Add a media item to the watchlist
+    pub fn add_to_watchlist(
+        &self,
+        tmdb_id: i32,
+        media_type: MediaType,
+        title: &str,
+        cover_image: Option<&str>,
+    ) -> SqliteResult<()> {
+        let media_type_str = match media_type {
+            MediaType::Movie => "movie",
+            MediaType::TvShow => "tvshow",
+        };
+
+        self.conn.execute(
+            "INSERT INTO watchlist (tmdb_id, media_type, title, cover_image, added_at)
+             VALUES (?1, ?2, ?3, ?4, datetime('now'))
+             ON CONFLICT(tmdb_id, media_type) DO UPDATE SET
+                 title = excluded.title,
+                 cover_image = excluded.cover_image",
+            params![tmdb_id, media_type_str, title, cover_image],
+        )?;
+
+        Ok(())
+    }
+
+    /// Remove a media item from the watchlist
+    pub fn remove_from_watchlist(&self, tmdb_id: i32, media_type: MediaType) -> SqliteResult<()> {
+        let media_type_str = match media_type {
+            MediaType::Movie => "movie",
+            MediaType::TvShow => "tvshow",
+        };
+
+        self.conn.execute(
+            "DELETE FROM watchlist WHERE tmdb_id = ?1 AND media_type = ?2",
+            params![tmdb_id, media_type_str],
+        )?;
+
+        Ok(())
+    }
+
+    /// Check if a media item is in the watchlist
+    #[allow(dead_code)]
+    pub fn is_in_watchlist(&self, tmdb_id: i32, media_type: MediaType) -> bool {
+        let media_type_str = match media_type {
+            MediaType::Movie => "movie",
+            MediaType::TvShow => "tvshow",
+        };
+
+        self.conn
+            .query_row(
+                "SELECT 1 FROM watchlist WHERE tmdb_id = ?1 AND media_type = ?2",
+                params![tmdb_id, media_type_str],
+                |_| Ok(()),
+            )
+            .is_ok()
+    }
+
+    /// Get all watchlist items (most recently added first)
+    pub fn get_watchlist(&self, limit: usize) -> Vec<WatchlistItem> {
+        let mut stmt = match self.conn.prepare(
+            "SELECT id, tmdb_id, media_type, title, cover_image, added_at
+             FROM watchlist
+             ORDER BY added_at DESC
+             LIMIT ?1",
+        ) {
+            Ok(stmt) => stmt,
+            Err(_) => return Vec::new(),
+        };
+
+        let rows = match stmt.query_map(params![limit as i64], |row| {
+            let media_type_str: String = row.get(2)?;
+            let media_type = match media_type_str.as_str() {
+                "movie" => MediaType::Movie,
+                _ => MediaType::TvShow,
+            };
+
+            let added_at_str: String = row.get(5)?;
+            let added_at = DateTime::parse_from_rfc3339(&added_at_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|_| {
+                    chrono::NaiveDateTime::parse_from_str(&added_at_str, "%Y-%m-%d %H:%M:%S")
+                        .map(|dt| dt.and_utc())
+                        .unwrap_or_else(|_| Utc::now())
+                });
+
+            Ok(WatchlistItem {
+                id: row.get(0)?,
+                tmdb_id: row.get(1)?,
+                media_type,
+                title: row.get(3)?,
+                cover_image: row.get(4)?,
+                added_at,
+            })
+        }) {
+            Ok(rows) => rows,
+            Err(_) => return Vec::new(),
+        };
+
+        rows.filter_map(|r| r.ok()).collect()
+    }
+
+    /// Get the set of (tmdb_id, media_type) pairs in the watchlist
+    pub fn get_watchlist_ids(&self) -> std::collections::HashSet<(i32, MediaType)> {
+        let mut stmt = match self
+            .conn
+            .prepare("SELECT tmdb_id, media_type FROM watchlist")
+        {
+            Ok(stmt) => stmt,
+            Err(_) => return std::collections::HashSet::new(),
+        };
+
+        let rows = match stmt.query_map([], |row| {
+            let tmdb_id: i32 = row.get(0)?;
+            let media_type_str: String = row.get(1)?;
+            let media_type = match media_type_str.as_str() {
+                "movie" => MediaType::Movie,
+                _ => MediaType::TvShow,
+            };
+            Ok((tmdb_id, media_type))
+        }) {
+            Ok(rows) => rows,
+            Err(_) => return std::collections::HashSet::new(),
+        };
+
+        rows.filter_map(|r| r.ok()).collect()
+    }
+
     /// Get unique shows/movies from history (for "continue watching" feature)
     /// Returns the most recent watch entry for each unique media item
     pub fn get_recent_media(&self, limit: usize) -> Vec<WatchedItem> {
@@ -375,6 +558,47 @@ mod tests {
             .mark_unwatched(12345, MediaType::TvShow, 1, 5)
             .unwrap();
         assert!(!history.is_watched(12345, MediaType::TvShow, 1, 5));
+    }
+
+    #[test]
+    fn test_watchlist_add_remove() {
+        let history = create_test_db();
+
+        history
+            .add_to_watchlist(12345, MediaType::TvShow, "Test Show", None)
+            .unwrap();
+
+        assert!(history.is_in_watchlist(12345, MediaType::TvShow));
+        assert!(!history.is_in_watchlist(12345, MediaType::Movie));
+
+        let items = history.get_watchlist(10);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Test Show");
+
+        history
+            .remove_from_watchlist(12345, MediaType::TvShow)
+            .unwrap();
+        assert!(!history.is_in_watchlist(12345, MediaType::TvShow));
+
+        let items = history.get_watchlist(10);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_watchlist_ids() {
+        let history = create_test_db();
+
+        history
+            .add_to_watchlist(111, MediaType::Movie, "Movie 1", None)
+            .unwrap();
+        history
+            .add_to_watchlist(222, MediaType::TvShow, "Show 1", None)
+            .unwrap();
+
+        let ids = history.get_watchlist_ids();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&(111, MediaType::Movie)));
+        assert!(ids.contains(&(222, MediaType::TvShow)));
     }
 
     #[test]

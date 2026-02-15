@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Type of media content
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MediaType {
     Movie,
     TvShow,
