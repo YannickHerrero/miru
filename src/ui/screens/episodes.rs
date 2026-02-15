@@ -9,8 +9,11 @@ use ratatui::{
 };
 
 use crate::api::{Episode, Media, Season};
-use crate::ui::components::SelectableList;
+use crate::ui::components::{DetailCard, SelectableList};
 use crate::ui::theme::Theme;
+
+/// Minimum terminal width to show the detail card
+const MIN_WIDTH_FOR_DETAIL_CARD: u16 = 100;
 
 /// Action from episodes screen
 pub enum EpisodesAction {
@@ -106,11 +109,13 @@ impl EpisodesScreen {
 
     /// Render the episodes screen
     pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let show_detail_card = area.width >= MIN_WIDTH_FOR_DETAIL_CARD && !self.list.is_empty();
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(2), // Title
-                Constraint::Min(5),    // Episodes list
+                Constraint::Min(5),    // Episodes list (and detail card)
                 Constraint::Length(2), // Help text
             ])
             .margin(1)
@@ -155,49 +160,31 @@ impl EpisodesScreen {
         let title_widget = Paragraph::new(title);
         frame.render_widget(title_widget, chunks[0]);
 
-        // Episodes list
+        // Main content area - split horizontally if wide enough
         if self.list.is_empty() {
             let no_episodes = Paragraph::new(Line::from(vec![Span::styled(
                 "No episodes found.",
                 theme.warning(),
             )]));
             frame.render_widget(no_episodes, chunks[1]);
+        } else if show_detail_card {
+            // Two-column layout: list on left, detail card on right
+            let content_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(55), // Episodes list
+                    Constraint::Percentage(45), // Detail card
+                ])
+                .split(chunks[1]);
+
+            // Render the list
+            self.render_list(frame, content_chunks[0], theme);
+
+            // Render the detail card for the show
+            DetailCard::render(frame, content_chunks[1], &self.media, theme);
         } else {
-            // Clone watched_episodes for the closure
-            let watched = self.watched_episodes.clone();
-
-            self.list.render(
-                frame,
-                chunks[1],
-                " Episodes ",
-                theme,
-                |episode, is_selected| {
-                    let is_watched = watched.contains(&episode.number);
-
-                    let style = if is_selected {
-                        theme.selected()
-                    } else if is_watched {
-                        theme.muted()
-                    } else {
-                        theme.normal()
-                    };
-                    let muted = theme.muted();
-
-                    let mut spans = vec![];
-
-                    // Watched indicator
-                    if is_watched {
-                        spans.push(Span::styled("[x] ", theme.success()));
-                    } else {
-                        spans.push(Span::styled("[ ] ", muted));
-                    }
-
-                    spans.push(Span::styled(format!("{}. ", episode.number), muted));
-                    spans.push(Span::styled(episode.title.clone(), style));
-
-                    spans
-                },
-            );
+            // Single column layout - just the list
+            self.render_list(frame, chunks[1], theme);
         }
 
         // Help text
@@ -213,5 +200,39 @@ impl EpisodesScreen {
         ]);
         let help_widget = Paragraph::new(help);
         frame.render_widget(help_widget, chunks[2]);
+    }
+
+    /// Render the episodes list
+    fn render_list(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        // Clone watched_episodes for the closure
+        let watched = self.watched_episodes.clone();
+
+        self.list
+            .render(frame, area, " Episodes ", theme, |episode, is_selected| {
+                let is_watched = watched.contains(&episode.number);
+
+                let style = if is_selected {
+                    theme.selected()
+                } else if is_watched {
+                    theme.muted()
+                } else {
+                    theme.normal()
+                };
+                let muted = theme.muted();
+
+                let mut spans = vec![];
+
+                // Watched indicator
+                if is_watched {
+                    spans.push(Span::styled("[x] ", theme.success()));
+                } else {
+                    spans.push(Span::styled("[ ] ", muted));
+                }
+
+                spans.push(Span::styled(format!("{}. ", episode.number), muted));
+                spans.push(Span::styled(episode.title.clone(), style));
+
+                spans
+            });
     }
 }
