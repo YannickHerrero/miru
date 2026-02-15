@@ -115,6 +115,14 @@ impl StreamDetailCard {
             ]));
         }
 
+        // Torrent name (with wrapping)
+        if !stream.title.is_empty() {
+            let max_width = inner.width.saturating_sub(2) as usize;
+            for line in wrap_text(&stream.title, max_width) {
+                lines.push(Line::from(Span::styled(line, theme.normal())));
+            }
+        }
+
         lines.push(Line::from("")); // Spacer
 
         // Quality + HDR row
