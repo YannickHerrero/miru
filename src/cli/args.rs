@@ -10,6 +10,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub vlc: bool,
 
+    /// Download mode (save files instead of playing)
+    #[arg(long, global = true)]
+    pub dl: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

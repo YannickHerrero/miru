@@ -4,5 +4,5 @@ mod init_wizard;
 mod screens;
 mod theme;
 
-pub use app::App;
+pub use app::{App, AppMode};
 pub use init_wizard::InitWizard;

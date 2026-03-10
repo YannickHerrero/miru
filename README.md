@@ -163,10 +163,16 @@ miru config --set rd_api_key YOUR_API_KEY
 # Interactive mode (default) - full TUI experience
 miru
 
+# Interactive download mode
+miru --dl
+
 # Quick search - skip straight to results
 miru search "frieren"
 miru search "inception"
 miru s "breaking bad"
+
+# Download mode with quick search
+miru --dl search "frieren"
 
 # Manage configuration
 miru config --show
@@ -174,6 +180,8 @@ miru config --set rd_api_key <KEY>
 miru config --set tmdb_api_key <KEY>
 miru config --reset
 ```
+
+In `--dl` mode, files are saved to `~/Downloads/miru` when available, with fallback to `./miru-downloads`.
 
 ## Keyboard Navigation
 

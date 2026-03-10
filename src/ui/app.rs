@@ -1,6 +1,8 @@
 use std::io::{self, Stdout};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use crossterm::{
@@ -13,9 +15,13 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     Frame, Terminal,
 };
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
 
-use crate::api::{Media, MediaType, Season, ScoringOptions, Stream, TmdbClient, TorrentioClient, sort_streams_by_score, get_recommended_indices, pin_recommended_to_top};
+use crate::api::{
+    get_recommended_indices, pin_recommended_to_top, sort_streams_by_score, Media, MediaType,
+    ScoringOptions, Season, Stream, TmdbClient, TorrentioClient,
+};
 use crate::config::{save_config, Config};
 use crate::error::Result;
 use crate::history::{WatchHistory, WatchedItem, WatchlistItem};
@@ -23,9 +29,9 @@ use crate::player::Player;
 use crate::streaming::TorrentStreamer;
 use crate::ui::components::Spinner;
 use crate::ui::screens::{
-    EpisodesAction, EpisodesScreen, ErrorAction, ErrorScreen, ResultsAction, ResultsScreen,
-    SearchAction, SearchScreen, SeasonsAction, SeasonsScreen, SourcesAction, SourcesContext,
-    SourcesScreen,
+    DownloadAction, DownloadScreen, EpisodesAction, EpisodesScreen, ErrorAction, ErrorScreen,
+    ResultsAction, ResultsScreen, SearchAction, SearchScreen, SeasonsAction, SeasonsScreen,
+    SourcesAction, SourcesContext, SourcesScreen,
 };
 use crate::ui::theme::{Theme, ThemeVariant};
 
@@ -38,6 +44,41 @@ enum Screen {
     Sources(SourcesScreen),
     Loading(Spinner),
     Error(ErrorScreen),
+    Download(DownloadScreen),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppMode {
+    Playback,
+    Download,
+}
+
+impl AppMode {
+    fn action_label(&self) -> &'static str {
+        match self {
+            Self::Playback => "play",
+            Self::Download => "download",
+        }
+    }
+}
+
+enum DownloadUpdate {
+    Running {
+        downloaded_bytes: u64,
+        total_bytes: Option<u64>,
+        speed_bytes: u64,
+        peers: Option<usize>,
+        message: String,
+    },
+    Completed {
+        path: String,
+    },
+    Failed {
+        message: String,
+    },
+    Cancelled {
+        message: String,
+    },
 }
 
 /// Pending async operation
@@ -84,6 +125,7 @@ pub struct App {
     tmdb: TmdbClient,
     torrentio: TorrentioClient,
     player: Player,
+    mode: AppMode,
     // Theme
     theme: Theme,
     /// Current theme variant (for cycling)
@@ -102,10 +144,14 @@ pub struct App {
     history: Option<WatchHistory>,
     /// Current playback context (for recording history)
     playback_context: Option<PlaybackContext>,
+    /// Active download progress channel receiver
+    download_updates: Option<UnboundedReceiver<DownloadUpdate>>,
+    /// Cancellation flag for active download
+    download_cancel: Option<Arc<AtomicBool>>,
 }
 
 impl App {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config, mode: AppMode) -> Self {
         let use_direct_streaming = config.use_direct_streaming();
 
         // Create Torrentio client based on whether we have RD configured
@@ -146,6 +192,7 @@ impl App {
             tmdb,
             torrentio,
             player,
+            mode,
             theme: Theme::from_config(&config.ui),
             theme_variant,
             config,
@@ -154,6 +201,8 @@ impl App {
             streaming_port,
             history,
             playback_context: None,
+            download_updates: None,
+            download_cancel: None,
         }
     }
 
@@ -196,6 +245,52 @@ impl App {
             .unwrap_or_default()
     }
 
+    fn poll_download_updates(&mut self) {
+        let mut pending = vec![];
+
+        if let Some(rx) = &mut self.download_updates {
+            while let Ok(update) = rx.try_recv() {
+                pending.push(update);
+            }
+        }
+
+        for update in pending {
+            if let Screen::Download(screen) = &mut self.screen {
+                match update {
+                    DownloadUpdate::Running {
+                        downloaded_bytes,
+                        total_bytes,
+                        speed_bytes,
+                        peers,
+                        message,
+                    } => {
+                        screen.set_running(
+                            downloaded_bytes,
+                            total_bytes,
+                            speed_bytes,
+                            peers,
+                            message,
+                        );
+                    }
+                    DownloadUpdate::Completed { path } => {
+                        screen.set_completed(path);
+                        self.download_updates = None;
+                        self.download_cancel = None;
+                    }
+                    DownloadUpdate::Failed { message } => {
+                        screen.set_failed(message);
+                        self.download_updates = None;
+                        self.download_cancel = None;
+                    }
+                    DownloadUpdate::Cancelled { message } => {
+                        screen.set_cancelled(message);
+                        self.download_updates = None;
+                        self.download_cancel = None;
+                    }
+                }
+            }
+        }
+    }
     /// Check if an episode is watched
     #[allow(dead_code)]
     pub fn is_episode_watched(
@@ -284,6 +379,8 @@ impl App {
         let mut terminal = self.setup_terminal()?;
 
         while !self.should_quit {
+            self.poll_download_updates();
+
             // Render current screen
             terminal.draw(|f| self.render(f))?;
 
@@ -346,6 +443,7 @@ impl App {
                 spinner.render(frame, chunks[1], &self.theme);
             }
             Screen::Error(screen) => screen.render(frame, area, &self.theme),
+            Screen::Download(screen) => screen.render(frame, area, &self.theme),
         }
     }
 
@@ -395,10 +493,8 @@ impl App {
                         }
                         SearchAction::RemoveFromWatchlist(item) => {
                             if let Some(history) = &self.history {
-                                let _ = history.remove_from_watchlist(
-                                    item.tmdb_id,
-                                    item.media_type,
-                                );
+                                let _ =
+                                    history.remove_from_watchlist(item.tmdb_id, item.media_type);
                             }
                         }
                     }
@@ -432,9 +528,8 @@ impl App {
                         ResultsAction::Back => {
                             let query = screen.query.clone();
                             let history = self.get_recent_history();
-                            let mut search_screen = SearchScreen::with_query_and_history(
-                                &query, history,
-                            );
+                            let mut search_screen =
+                                SearchScreen::with_query_and_history(&query, history);
                             search_screen.set_watchlist(self.get_watchlist());
                             self.screen = Screen::Search(search_screen);
                         }
@@ -558,6 +653,25 @@ impl App {
                         }
                         ErrorAction::Back => {
                             self.screen = Screen::Search(self.new_search_screen());
+                        }
+                    }
+                }
+            }
+            Screen::Download(screen) => {
+                if let Some(action) = screen.handle_key(key) {
+                    match action {
+                        DownloadAction::Cancel => {
+                            if let Some(cancel) = &self.download_cancel {
+                                cancel.store(true, Ordering::Relaxed);
+                            }
+                            screen.set_cancelling();
+                        }
+                        DownloadAction::Back => {
+                            if screen.is_finished() {
+                                self.download_updates = None;
+                                self.download_cancel = None;
+                                self.screen = Screen::Search(self.new_search_screen());
+                            }
                         }
                     }
                 }
@@ -689,21 +803,19 @@ impl App {
         };
 
         match result {
-            Ok(media) => {
-                match media.media_type {
-                    MediaType::Movie => {
-                        self.pending = PendingOperation::FetchSources {
-                            media,
-                            season: 0,
-                            episode: 0,
-                            show_uncached: false,
-                        };
-                    }
-                    MediaType::TvShow => {
-                        self.pending = PendingOperation::FetchSeasons(media);
-                    }
+            Ok(media) => match media.media_type {
+                MediaType::Movie => {
+                    self.pending = PendingOperation::FetchSources {
+                        media,
+                        season: 0,
+                        episode: 0,
+                        show_uncached: false,
+                    };
                 }
-            }
+                MediaType::TvShow => {
+                    self.pending = PendingOperation::FetchSeasons(media);
+                }
+            },
             Err(e) => {
                 self.screen = Screen::Error(ErrorScreen::new(
                     format!("Failed to load media details: {}", e),
@@ -785,10 +897,8 @@ impl App {
                         .await
                     {
                         Ok(episodes) => {
-                            let watched = self.get_watched_episodes_for_season(
-                                media.tmdb_id(),
-                                season.number,
-                            );
+                            let watched = self
+                                .get_watched_episodes_for_season(media.tmdb_id(), season.number);
                             let mut screen =
                                 EpisodesScreen::with_episodes(media, Some(season), episodes);
                             screen.set_watched_episodes(watched);
@@ -796,10 +906,8 @@ impl App {
                         }
                         Err(_) => {
                             // Fallback to basic episode list
-                            let watched = self.get_watched_episodes_for_season(
-                                media.tmdb_id(),
-                                season.number,
-                            );
+                            let watched = self
+                                .get_watched_episodes_for_season(media.tmdb_id(), season.number);
                             let mut screen = EpisodesScreen::with_season(media, season);
                             screen.set_watched_episodes(watched);
                             self.screen = Screen::Episodes(screen);
@@ -828,8 +936,7 @@ impl App {
         match self.tmdb.get_season_episodes(tmdb_id, season_number).await {
             Ok(episodes) => {
                 let watched = self.get_watched_episodes_for_season(tmdb_id, season_number);
-                let mut screen =
-                    EpisodesScreen::with_episodes(media, season, episodes);
+                let mut screen = EpisodesScreen::with_episodes(media, season, episodes);
                 screen.set_watched_episodes(watched);
                 self.screen = Screen::Episodes(screen);
             }
@@ -888,7 +995,10 @@ impl App {
         match streams_result {
             Ok(mut streams) => {
                 // Detect anime from genres
-                let is_anime = media.genres.iter().any(|g| g.eq_ignore_ascii_case("animation"));
+                let is_anime = media
+                    .genres
+                    .iter()
+                    .any(|g| g.eq_ignore_ascii_case("animation"));
 
                 // Build scoring options from media context
                 let scoring_options = ScoringOptions {
@@ -918,6 +1028,7 @@ impl App {
                     context,
                     show_uncached,
                     recommended_count,
+                    self.mode.action_label(),
                 ));
             }
             Err(e) => {
@@ -950,7 +1061,11 @@ impl App {
         match streams_result {
             Ok(mut streams) => {
                 // Detect anime from genres
-                let is_anime = context.media.genres.iter().any(|g| g.eq_ignore_ascii_case("animation"));
+                let is_anime = context
+                    .media
+                    .genres
+                    .iter()
+                    .any(|g| g.eq_ignore_ascii_case("animation"));
 
                 // Build scoring options from media context
                 let scoring_options = ScoringOptions {
@@ -979,6 +1094,7 @@ impl App {
                     context,
                     show_uncached,
                     recommended_count,
+                    self.mode.action_label(),
                 ));
             }
             Err(e) => {
@@ -1004,8 +1120,13 @@ impl App {
         }
     }
 
-    /// Resolve and play stream
+    /// Resolve selected stream for playback or download
     async fn handle_resolve_stream(&mut self, stream: Stream) {
+        if self.mode == AppMode::Download {
+            self.start_download(stream);
+            return;
+        }
+
         // Check if we have a direct URL (Real-Debrid) or need P2P streaming
         if let Some(url) = &stream.url {
             // Real-Debrid: we have a direct HTTP URL
@@ -1020,6 +1141,52 @@ impl App {
                 false,
             ));
         }
+    }
+
+    fn start_download(&mut self, stream: Stream) {
+        let download_dir = default_download_dir();
+        let save_dir = download_dir.display().to_string();
+        let title = self.current_title_for_filename();
+
+        let screen_title = title
+            .clone()
+            .unwrap_or_else(|| "Selected source".to_string());
+        self.screen = Screen::Download(DownloadScreen::new(screen_title, save_dir));
+
+        let (tx, rx) = mpsc::unbounded_channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+
+        self.download_updates = Some(rx);
+        self.download_cancel = Some(cancel.clone());
+
+        if let Some(url) = stream.url.clone() {
+            tokio::spawn(download_direct_url(url, download_dir, title, tx, cancel));
+            return;
+        }
+
+        if stream.info_hash.is_some() {
+            tokio::spawn(download_p2p(stream, download_dir, tx, cancel));
+            return;
+        }
+
+        let _ = tx.send(DownloadUpdate::Failed {
+            message: "No URL or torrent hash available for this source".to_string(),
+        });
+    }
+
+    fn current_title_for_filename(&self) -> Option<String> {
+        self.playback_context.as_ref().map(|ctx| {
+            if ctx.season > 0 {
+                format!(
+                    "{} S{:02}E{:02}",
+                    ctx.media.title.trim(),
+                    ctx.season,
+                    ctx.episode
+                )
+            } else {
+                ctx.media.title.trim().to_string()
+            }
+        })
     }
 
     /// Start P2P streaming for a torrent
@@ -1141,5 +1308,264 @@ impl App {
         if let Some(streamer) = streamer_guard.as_ref() {
             streamer.cleanup().await;
         }
+    }
+}
+
+fn default_download_dir() -> PathBuf {
+    if let Some(path) = dirs::download_dir() {
+        return path.join("miru");
+    }
+    PathBuf::from("./miru-downloads")
+}
+
+fn ensure_download_dir(path: &Path) -> std::result::Result<(), String> {
+    std::fs::create_dir_all(path).map_err(|e| {
+        format!(
+            "Failed to create download directory '{}': {}",
+            path.display(),
+            e
+        )
+    })
+}
+
+fn sanitize_filename(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => c,
+        })
+        .collect();
+
+    let trimmed = cleaned.trim().trim_matches('.').trim();
+    if trimmed.is_empty() {
+        "download".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn filename_from_url(url: &str) -> Option<String> {
+    let without_query = url.split('?').next().unwrap_or(url);
+    let last_segment = without_query.rsplit('/').next()?;
+    if last_segment.is_empty() {
+        None
+    } else {
+        Some(last_segment.to_string())
+    }
+}
+
+fn choose_file_path(download_dir: &Path, base_name: &str) -> PathBuf {
+    let candidate = download_dir.join(base_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    let stem = Path::new(base_name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("download");
+    let ext = Path::new(base_name).extension().and_then(|s| s.to_str());
+
+    for i in 1..1000 {
+        let next_name = match ext {
+            Some(e) if !e.is_empty() => format!("{} ({i}).{e}", stem),
+            _ => format!("{} ({i})", stem),
+        };
+        let next = download_dir.join(next_name);
+        if !next.exists() {
+            return next;
+        }
+    }
+
+    download_dir.join(format!("{}-{}", stem, chrono::Utc::now().timestamp()))
+}
+
+async fn download_direct_url(
+    url: String,
+    download_dir: PathBuf,
+    title: Option<String>,
+    tx: UnboundedSender<DownloadUpdate>,
+    cancel: Arc<AtomicBool>,
+) {
+    if let Err(e) = ensure_download_dir(&download_dir) {
+        let _ = tx.send(DownloadUpdate::Failed { message: e });
+        return;
+    }
+
+    let file_name = title
+        .map(|t| format!("{}.mp4", sanitize_filename(&t)))
+        .or_else(|| filename_from_url(&url).map(|s| sanitize_filename(&s)))
+        .unwrap_or_else(|| "download.mp4".to_string());
+
+    let target_path = choose_file_path(&download_dir, &file_name);
+
+    let client = reqwest::Client::new();
+    let response = match client.get(&url).send().await {
+        Ok(resp) => resp,
+        Err(e) => {
+            let _ = tx.send(DownloadUpdate::Failed {
+                message: format!("Failed to start download: {}", e),
+            });
+            return;
+        }
+    };
+
+    if !response.status().is_success() {
+        let _ = tx.send(DownloadUpdate::Failed {
+            message: format!("Download failed with HTTP {}", response.status()),
+        });
+        return;
+    }
+
+    let total_bytes = response.content_length();
+    let mut response = response;
+
+    let mut file = match tokio::fs::File::create(&target_path).await {
+        Ok(f) => f,
+        Err(e) => {
+            let _ = tx.send(DownloadUpdate::Failed {
+                message: format!("Failed to create file '{}': {}", target_path.display(), e),
+            });
+            return;
+        }
+    };
+
+    let start = Instant::now();
+    let mut downloaded: u64 = 0;
+    let mut last_emit = Instant::now();
+
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            let _ = tx.send(DownloadUpdate::Cancelled {
+                message: "Download cancelled by user".to_string(),
+            });
+            return;
+        }
+
+        let chunk = match response.chunk().await {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = tx.send(DownloadUpdate::Failed {
+                    message: format!("Network error while downloading: {}", e),
+                });
+                return;
+            }
+        };
+
+        let Some(bytes) = chunk else { break };
+
+        if let Err(e) = tokio::io::AsyncWriteExt::write_all(&mut file, &bytes).await {
+            let _ = tx.send(DownloadUpdate::Failed {
+                message: format!("Failed writing to file: {}", e),
+            });
+            return;
+        }
+
+        downloaded += bytes.len() as u64;
+
+        if last_emit.elapsed() >= Duration::from_millis(300) {
+            let elapsed = start.elapsed().as_secs_f64().max(0.001);
+            let speed = (downloaded as f64 / elapsed) as u64;
+            let _ = tx.send(DownloadUpdate::Running {
+                downloaded_bytes: downloaded,
+                total_bytes,
+                speed_bytes: speed,
+                peers: None,
+                message: "Downloading via direct URL...".to_string(),
+            });
+            last_emit = Instant::now();
+        }
+    }
+
+    let elapsed = start.elapsed().as_secs_f64().max(0.001);
+    let speed = (downloaded as f64 / elapsed) as u64;
+    let _ = tx.send(DownloadUpdate::Running {
+        downloaded_bytes: downloaded,
+        total_bytes,
+        speed_bytes: speed,
+        peers: None,
+        message: "Finalizing file...".to_string(),
+    });
+
+    let _ = tx.send(DownloadUpdate::Completed {
+        path: target_path.display().to_string(),
+    });
+}
+
+async fn download_p2p(
+    stream: Stream,
+    download_dir: PathBuf,
+    tx: UnboundedSender<DownloadUpdate>,
+    cancel: Arc<AtomicBool>,
+) {
+    if let Err(e) = ensure_download_dir(&download_dir) {
+        let _ = tx.send(DownloadUpdate::Failed { message: e });
+        return;
+    }
+
+    let magnet = match stream.magnet_link() {
+        Some(m) => m,
+        None => {
+            let _ = tx.send(DownloadUpdate::Failed {
+                message: "No torrent hash available for this source".to_string(),
+            });
+            return;
+        }
+    };
+
+    let streamer = match TorrentStreamer::with_download_dir(download_dir.clone(), 3131).await {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = tx.send(DownloadUpdate::Failed {
+                message: format!("Failed to initialize P2P download: {}", e),
+            });
+            return;
+        }
+    };
+
+    let handle = match streamer.stream_magnet(&magnet).await {
+        Ok(h) => h,
+        Err(e) => {
+            let _ = tx.send(DownloadUpdate::Failed {
+                message: format!("Failed to start P2P download: {}", e),
+            });
+            return;
+        }
+    };
+
+    let target_path = download_dir.join(&handle.file_name);
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            streamer.cleanup_with(false).await;
+            let _ = tx.send(DownloadUpdate::Cancelled {
+                message: "Download cancelled by user (partial file kept)".to_string(),
+            });
+            return;
+        }
+
+        if let Some(progress) = streamer.get_progress().await {
+            let _ = tx.send(DownloadUpdate::Running {
+                downloaded_bytes: progress.downloaded_bytes,
+                total_bytes: if progress.total_bytes > 0 {
+                    Some(progress.total_bytes)
+                } else {
+                    None
+                },
+                speed_bytes: progress.download_speed,
+                peers: Some(progress.peers),
+                message: "Downloading via P2P...".to_string(),
+            });
+
+            if progress.total_bytes > 0 && progress.downloaded_bytes >= progress.total_bytes {
+                streamer.cleanup_with(false).await;
+                let _ = tx.send(DownloadUpdate::Completed {
+                    path: target_path.display().to_string(),
+                });
+                return;
+            }
+        }
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 }

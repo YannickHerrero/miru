@@ -40,6 +40,8 @@ pub struct SourcesScreen {
     pub context: SourcesContext,
     /// Number of recommended sources pinned to the top of the list
     pub recommended_count: usize,
+    /// Action label for Enter key (play/download)
+    action_label: String,
 }
 
 impl SourcesScreen {
@@ -50,6 +52,7 @@ impl SourcesScreen {
         context: SourcesContext,
         show_uncached: bool,
         recommended_count: usize,
+        action_label: &str,
     ) -> Self {
         Self {
             title,
@@ -62,6 +65,7 @@ impl SourcesScreen {
             show_uncached,
             context,
             recommended_count,
+            action_label: action_label.to_string(),
         }
     }
 
@@ -210,7 +214,7 @@ impl SourcesScreen {
             Span::styled("↑/↓", theme.highlight()),
             Span::styled(" navigate • ", theme.muted()),
             Span::styled("Enter", theme.highlight()),
-            Span::styled(" play • ", theme.muted()),
+            Span::styled(format!(" {} • ", self.action_label), theme.muted()),
             Span::styled("u", theme.highlight()),
             Span::styled(format!(" {} • ", uncached_text), theme.muted()),
             Span::styled("Esc", theme.highlight()),

@@ -13,6 +13,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use crate::cli::{Cli, Commands};
 use crate::config::PlayerConfig;
 use crate::error::Result;
+use crate::ui::AppMode;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -23,9 +24,14 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    let app_mode = if cli.dl {
+        AppMode::Download
+    } else {
+        AppMode::Playback
+    };
 
-    // Check VLC availability early if --vlc flag is passed
-    let player_override = if cli.vlc {
+    // Check VLC availability early if --vlc flag is passed (playback mode only)
+    let player_override = if cli.vlc && !cli.dl {
         let vlc_config = PlayerConfig::vlc();
         if which::which(&vlc_config.command).is_err() {
             eprintln!("Error: VLC is not installed or not found in PATH.");
@@ -45,13 +51,13 @@ async fn main() -> Result<()> {
             cli::commands::config(show, set, reset).await?;
         }
         Some(Commands::Search { query }) => {
-            cli::commands::search(query, player_override).await?;
+            cli::commands::search(query, player_override, app_mode).await?;
         }
         Some(Commands::Play { query: _ }) => {
             println!("Coming soon: direct play feature");
         }
         None => {
-            cli::commands::interactive(player_override).await?;
+            cli::commands::interactive(player_override, app_mode).await?;
         }
     }
 
