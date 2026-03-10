@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use crate::config::{config_path, load_config, save_config, Config, PlayerConfig};
 use crate::error::Result;
-use crate::ui::{App, InitWizard};
+use crate::ui::{App, AppMode, InitWizard};
 
 /// Run the first-time setup wizard
 pub async fn init() -> Result<()> {
@@ -132,12 +132,16 @@ pub async fn config(show: bool, set: Option<String>, reset: bool) -> Result<()> 
 }
 
 /// Handle the search command
-pub async fn search(query: Option<String>, player_override: Option<PlayerConfig>) -> Result<()> {
+pub async fn search(
+    query: Option<String>,
+    player_override: Option<PlayerConfig>,
+    app_mode: AppMode,
+) -> Result<()> {
     let mut config = load_config()?;
     if let Some(player_config) = player_override {
         config.player = player_config;
     }
-    let mut app = App::new(config);
+    let mut app = App::new(config, app_mode);
 
     if let Some(q) = query {
         app.set_initial_query(&q);
@@ -147,7 +151,7 @@ pub async fn search(query: Option<String>, player_override: Option<PlayerConfig>
 }
 
 /// Run interactive mode (default)
-pub async fn interactive(player_override: Option<PlayerConfig>) -> Result<()> {
+pub async fn interactive(player_override: Option<PlayerConfig>, app_mode: AppMode) -> Result<()> {
     let mut config = match load_config() {
         Ok(c) => c,
         Err(_) => {
@@ -161,6 +165,6 @@ pub async fn interactive(player_override: Option<PlayerConfig>) -> Result<()> {
         config.player = player_config;
     }
 
-    let mut app = App::new(config);
+    let mut app = App::new(config, app_mode);
     app.run().await
 }

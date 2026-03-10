@@ -271,10 +271,17 @@ impl TorrentStreamer {
 
     /// Clean up the current torrent
     pub async fn cleanup(&self) {
+        self.cleanup_with(true).await;
+    }
+
+    /// Clean up the current torrent with optional file deletion
+    pub async fn cleanup_with(&self, delete_files: bool) {
         let mut active = self.active_torrent.write().await;
         if let Some(torrent) = active.take() {
-            // Delete the torrent and its files
-            let _ = self.session.delete(torrent.torrent_id.into(), true).await;
+            let _ = self
+                .session
+                .delete(torrent.torrent_id.into(), delete_files)
+                .await;
         }
     }
 

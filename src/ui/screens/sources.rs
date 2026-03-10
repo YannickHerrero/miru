@@ -38,6 +38,8 @@ pub struct SourcesScreen {
     pub show_uncached: bool,
     /// Context for re-fetching sources when toggling
     pub context: SourcesContext,
+    /// Action label for Enter key (play/download)
+    action_label: String,
 }
 
 impl SourcesScreen {
@@ -47,6 +49,7 @@ impl SourcesScreen {
         sources: Vec<Stream>,
         context: SourcesContext,
         show_uncached: bool,
+        action_label: &str,
     ) -> Self {
         Self {
             title,
@@ -58,6 +61,7 @@ impl SourcesScreen {
             list: SelectableList::new(sources),
             show_uncached,
             context,
+            action_label: action_label.to_string(),
         }
     }
 
@@ -187,7 +191,7 @@ impl SourcesScreen {
             Span::styled("↑/↓", theme.highlight()),
             Span::styled(" navigate • ", theme.muted()),
             Span::styled("Enter", theme.highlight()),
-            Span::styled(" play • ", theme.muted()),
+            Span::styled(format!(" {} • ", self.action_label), theme.muted()),
             Span::styled("u", theme.highlight()),
             Span::styled(format!(" {} • ", uncached_text), theme.muted()),
             Span::styled("Esc", theme.highlight()),

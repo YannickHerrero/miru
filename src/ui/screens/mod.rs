@@ -1,3 +1,4 @@
+mod download;
 mod episodes;
 mod error;
 mod results;
@@ -6,6 +7,7 @@ mod seasons;
 mod sources;
 mod vlc_link;
 
+pub use download::{DownloadAction, DownloadScreen};
 pub use episodes::{EpisodesAction, EpisodesScreen};
 pub use error::{ErrorAction, ErrorScreen};
 pub use results::{ResultsAction, ResultsScreen};
